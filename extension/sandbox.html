@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Clip Vault Picker Sandbox</title>
+</head>
+<body>
+<!--
+  這是一個 MV3 沙盒頁面：options.html 用隱藏 iframe 載入這裡。
+
+  為什麼需要它：Chrome MV3 對一般擴充頁面（options.html）的 CSP
+  完全不允許 script-src 放遠端網域，只能是 'self'。Google Picker
+  的元件（gapi/picker）一定要從 https://apis.google.com 載入，
+  沒有辦法打包進擴充本身。沙盒頁面的 CSP 可以放寬允許遠端腳本，
+  代價是它跑在隔離的 null-origin 環境，不能呼叫 chrome.* API——
+  所以資料一律透過 window.postMessage 跟 options.html 來回傳遞，
+  token 由 options.html 向 background 要來後轉交進來，選完的資料夾
+  再傳出去。
+-->
+<script src="https://apis.google.com/js/api.js"></script>
+<script src="sandbox.js"></script>
+</body>
+</html>

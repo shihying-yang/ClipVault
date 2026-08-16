@@ -1,15 +1,19 @@
 // =====================================================
 // Clip Vault — 設定頁
 //
-// Google Picker 一定要在有 DOM 的頁面跑（service worker 沒有 window），
-// 所以資料夾選擇器放在這裡；token 簽發還是統一交給 background.js，
-// 避免兩個地方各自維護一份 OAuth 邏輯。
+// Google Picker 需要從 https://apis.google.com 載入遠端腳本，但
+// Chrome MV3 對一般擴充頁面（這裡）的 CSP 完全不允許 script-src
+// 放任何遠端網域——直接 <script src="https://apis.google.com/..."> 
+// 會讓整個 manifest 被拒絕載入。正確做法是把 Picker 相關的東西
+// 丟進一個「沙盒頁面」（sandbox.html，CSP 可以放寬），這裡只負責
+// 拿 token、跟沙盒 iframe 用 postMessage 來回傳遞資料。
 // =====================================================
 
 const $ = (id) => document.getElementById(id);
 
 let pickedFolderId = '';
 let pickedFolderName = '';
+let sandboxReady = false;
 
 function showStatus(msg, ok) {
   const box = $('statusBox');
@@ -71,54 +75,66 @@ $('btnConnect').addEventListener('click', async () => {
   refreshConnStatus();
 });
 
-// ── Google Picker ────────────────────────
+// ── 跟沙盒 iframe 溹通 ────────────────────────
+// sandbox.html 跑在隢離環境，不能呼叫 chrome.*，所有資料都靠
+// postMessage 來回傳遞。iframe 載入完成會主動送一個 READY 訊號，
+// 避免我們在它還沒 load 完就送開啟指令而漏接。
 
-let pickerLoaded = false;
+let pendingPickerResolve = null;
+let pendingPickerReject = null;
 
-function loadGapi() {
+window.addEventListener('message', (ev) => {
+  const msg = ev.data;
+  if (!msg || typeof msg.type !== 'string') return;
+  if (msg.type === 'CV_SANDBOX_READY') {
+    sandboxReady = true;
+    return;
+  }
+  if (msg.type === 'CV_PICKER_RESULT') {
+    pickedFolderId = msg.folderId;
+    pickedFolderName = msg.folderName;
+    $('driveFolderLabel').textContent = `📁 ${pickedFolderName}`;
+    if (pendingPickerResolve) pendingPickerResolve();
+    pendingPickerResolve = null;
+    pendingPickerReject = null;
+    return;
+  }
+  if (msg.type === 'CV_PICKER_CANCEL') {
+    if (pendingPickerResolve) pendingPickerResolve(); // 使用者自己取消，不算錯誤
+    pendingPickerResolve = null;
+    pendingPickerReject = null;
+    return;
+  }
+  if (msg.type === 'CV_PICKER_ERROR') {
+    if (pendingPickerReject) pendingPickerReject(new Error(msg.error || '未知錯誤'));
+    pendingPickerResolve = null;
+    pendingPickerReject = null;
+  }
+});
+
+function waitForSandbox(timeoutMs = 8000) {
+  if (sandboxReady) return Promise.resolve();
   return new Promise((resolve, reject) => {
-    if (window.gapi) return resolve();
-    const s = document.createElement('script');
-    s.src = 'https://apis.google.com/js/api.js';
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error('Google API 腳本載入失敗（檢查網路連線）'));
-    document.head.appendChild(s);
-  });
-}
-
-function loadPickerLib() {
-  return new Promise((resolve, reject) => {
-    if (pickerLoaded) return resolve();
-    window.gapi.load('picker', {
-      callback: () => { pickerLoaded = true; resolve(); },
-      onerror: () => reject(new Error('Picker 元件載入失敗')),
-    });
-  });
-}
-
-function openPicker(token, apiKey) {
-  const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
-    .setSelectFolderEnabled(true)
-    .setIncludeFolders(true)
-    .setMimeTypes('application/vnd.google-apps.folder');
-
-  const picker = new google.picker.PickerBuilder()
-    .addView(view)
-    .setOAuthToken(token)
-    .setDeveloperKey(apiKey)
-    .setTitle('選一個資料夾作為 Clip Vault 的目的地')
-    .setCallback((data) => {
-      if (data.action === google.picker.Action.PICKED) {
-        const doc = data.docs && data.docs[0];
-        if (doc) {
-          pickedFolderId = doc.id;
-          pickedFolderName = doc.name;
-          $('driveFolderLabel').textContent = `📁 ${pickedFolderName}`;
-        }
+    const started = Date.now();
+    const check = setInterval(() => {
+      if (sandboxReady) {
+        clearInterval(check);
+        resolve();
+      } else if (Date.now() - started > timeoutMs) {
+        clearInterval(check);
+        reject(new Error('Picker 沙盒頁面沒有回應（檢查網路連線）'));
       }
-    })
-    .build();
-  picker.setVisible(true);
+    }, 100);
+  });
+}
+
+function openPickerInSandbox(token, apiKey) {
+  return new Promise((resolve, reject) => {
+    pendingPickerResolve = resolve;
+    pendingPickerReject = reject;
+    const frame = $('pickerSandbox');
+    frame.contentWindow.postMessage({ type: 'CV_OPEN_PICKER', token, apiKey }, '*');
+  });
 }
 
 $('btnPickFolder').addEventListener('click', async () => {
@@ -131,9 +147,8 @@ $('btnPickFolder').addEventListener('click', async () => {
     }
     const tokenRes = await sendBg({ type: 'CLIPVAULT_GET_TOKEN' });
     if (!tokenRes || !tokenRes.ok) throw new Error(tokenRes && tokenRes.error);
-    await loadGapi();
-    await loadPickerLib();
-    openPicker(tokenRes.token, apiKey);
+    await waitForSandbox();
+    await openPickerInSandbox(tokenRes.token, apiKey);
   } catch (e) {
     showStatus(`選擇資料夾失敗：${(e && e.message) || '未知錯誤'}`, false);
   } finally {
