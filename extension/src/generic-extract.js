@@ -3,10 +3,9 @@
 //
 // 5 個社群平台走 adapters.js／extract.js 的專用邏輯（沿用 PostSync
 // 驗證過的錨點）。除此之外的任何網頁，走這裡：輕量版，不做像
-obsidian-clipper 官方那樣的完整可讀性演算法／模板系統——
-只做兩件事，夠用就好：
-//   1. 使用者選取了文字 → 收選取的內容
-//   2. 沒有選取 → 收整頁的「看起來像主文」的內容（粗略啟發式）
+// obsidian-clipper 官方那樣的完整可讀性演算法／模板系統，只做兩件事：
+//   1. 使用者選取了文字 → 收選取範圍本身的內容
+//   2. 沒有選取 → 收整頁裡「看起來像主文」的區塊（粗略啟發式，不保證每次都準）
 //
 // 這一層完全不碰 chrome.*、不碰網路，只吃 DOM、吐資料，跟
 // extract.js 的分工原則一致：好測試、改壞了容易看出來。
@@ -25,7 +24,7 @@ obsidian-clipper 官方那樣的完整可讀性演算法／模板系統——
     try {
       const cs = getComputedStyle(el);
       if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return true;
-    } catch (_) { /* 取不到樣式就當作可見 */ }
+    } catch (_) { /* 取不到樣式就當作可視 */ }
     return isHiddenEl(el.parentElement);
   }
 
@@ -45,13 +44,13 @@ obsidian-clipper 官方那樣的完整可讀性演算法／模板系統——
           if (images.length >= 10) break;
         }
       }
-    } catch (_) { /* 選取範圍抓不到容器就算了，純文字仍然收得到 */ }
+    } catch (_) { /* 選取範圍抱不到容器就算了，純文字仍然收得到 */ }
     return { text, images, source: 'selection' };
   }
 
   function mainCandidate() {
     const preferred = document.querySelector(
-      'article, main, [role="main"], [itemprop="articleBody"]'
+      'article, main, [role="main"], [itemprop="articleBody"]',
     );
     if (preferred) return preferred;
 

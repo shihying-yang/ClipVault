@@ -3,7 +3,7 @@
 //
 // 一個平台一組錨點。臉書那類 class name 是亂數（x1i10hfl 每次發版都會變），
 // 拿來當選擇器等於保證下次改版就壞，所以這裡一律只認結構性錨點：
-role、data-testid、href 樣式、標題階層。
+// role、data-testid、href 樣式、標題階層。
 //
 // 每個 adapter 的欄位：
 //   id / label   識別字與顯示名
@@ -22,7 +22,7 @@ role、data-testid、href 樣式、標題階層。
 // 留在 DOM 裡，所以「展開全文」這個動作反而讓它更容易混進內文。
 const ACTION_WORDS = new RegExp(`^(${[
   // 互動列
-  '讚', '說讚', '大心', '哈', '嗹', '怒', '留言', '分享', '轉發', '回覆', '檢視',
+  '讚', '說讚', '大心', '哈', '喹', '怒', '留言', '分享', '轉發', '回覆', '檢視',
   '追蹤', '已追蹤', '追蹤中', '加入', '傳送',
   'Like', 'Comment', 'Share', 'Reply', 'Repost', 'Retweet', 'View', 'Follow', 'Send',
   // 展開／收合
@@ -37,7 +37,7 @@ const ACTION_WORDS = new RegExp(`^(${[
 ].join('|')})$`, 'i');
 
 // 臉書貼文的永久連結長相。permalink 抽取與「這是不是一則貼文」的判定
-// 共用同一份，兩邊各寫一份遲早會分岔。
+// 共用同一份，兩邊各寫一份遲早會分岐。
 const FB_PERMALINK = 'a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid="],'
   + ' a[href*="/share/p/"], a[href*="/share/v/"], a[href*="/videos/"],'
   + ' a[href*="/photo/"], a[href*="/photos/"], a[href*="/reel/"]';
