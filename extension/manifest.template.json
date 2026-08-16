@@ -17,7 +17,7 @@
   "oauth2": {
     "client_id": "REPLACE_ME_WITH_YOUR_OWN_CLIENT_ID.apps.googleusercontent.com",
     "scopes": [
-      "https://www.googleapis.com/auth/drive.file"
+      "https://www.googleapis.com/auth/drive"
     ]
   },
   "background": {
@@ -60,16 +60,5 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "x_config": {
-    "picker_api_key": "REPLACE_ME_WITH_YOUR_PICKER_API_KEY"
-  },
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuHfprNVEnPMbbqWkXuNE2FGTf4T+4aFcaJQg+Tz+I7Hfbirios1hFUkFjJeAlWsTNLZ/2Qy1v1jK/7x9ZEfzoJqEyomJJwdoOscu8r49BJLDRkygiOvHF8wKdRlnSVmEk/ZR8J9KdDGy3RH1WO69t7qsOmXWMD8mFABML3RxmmRe0otmkkoZHPiR90ATbfI0dS8BOyHMKyZ9CxU4W7Md5tJL/VzVZXdYJq5fSLSdL3kDOH6bCFuKFAFXmKctT+OMsZ6Eo5uRJXMGhe/npE//ayq+ffqoravpuwC7AC3NwNh6cDndNCP4PN3n4aQ/ER1nA2IHrH8X7+FpV92c1UaU/wIDAQAB",
-  "sandbox": {
-    "pages": [
-      "sandbox.html"
-    ]
-  },
-  "content_security_policy": {
-    "sandbox": "sandbox allow-scripts allow-popups; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://*.google.com; object-src 'self'; child-src 'self' https://*.google.com;"
-  }
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuHfprNVEnPMbbqWkXuNE2FGTf4T+4aFcaJQg+Tz+I7Hfbirios1hFUkFjJeAlWsTNLZ/2Qy1v1jK/7x9ZEfzoJqEyomJJwdoOscu8r49BJLDRkygiOvHF8wKdRlnSVmEk/ZR8J9KdDGy3RH1WO69t7qsOmXWMD8mFABML3RxmmRe0otmkkoZHPiR90ATbfI0dS8BOyHMKyZ9CxU4W7Md5tJL/VzVZXdYJq5fSLSdL3kDOH6bCFuKFAFXmKctT+OMsZ6Eo5uRJXMGhe/npE//ayq+ffqoravpuwC7AC3NwNh6cDndNCP4PN3n4aQ/ER1nA2IHrH8X7+FpV92c1UaU/wIDAQAB"
 }

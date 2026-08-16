@@ -9,18 +9,17 @@
 DOM 錨點），比通用擷取準確很多；其他任何網頁走通用擷取（選取優先，沒選取就
 抓看起來像主文的區塊）。
 
-- **兩個目的地各自獨立**：Drive 資料夾、Obsidian vault/資料夾/標籤都在設定頁
+- **兩個目的地各自獨立**：Drive 路徑、Obsidian vault/資料夾/標籤都在設定頁
   裡先設好，收藏時直接套用，不用每次選
-- **Google Drive 資料夾自己選**：用 Google 官方 Picker 挑一個現有資料夾，不是
-  寫死自動建立
+- **Google Drive 目的地填路徑就好**：填一個像 `00 inbox/Clip Vault 收藏`
+  的路徑字串，找不到的那一層會自動建立（原因見下面「為什麼不是用 Google
+  Picker」）
 - **Obsidian 免外掛**：走 Obsidian 原生的 `obsidian://new` URI，不需要裝
   Advanced URI 之類的社群外掛
 - **標籤**：兩邊都會把標籤寫成內容開頭的一行文字（`#工作 #靈感`），不是額外
   的中繼資料欄位
 - **跨瀏覽器**：從第一天就用 `chrome.identity.launchWebAuthFlow()`，Chrome／
   Vivaldi／Brave／Comet 都能連 Google（原因見下面「OAuth 設定」一節）
-- **最小權限**：Drive 只用 `drive.file` scope，只碰這個擴充自己建立或使用者
-  透過 Picker 明確選過的檔案
 
 ## 這是「輕量版」
 
@@ -39,13 +38,37 @@ DOM 錨點），比通用擷取準確很多；其他任何網頁走通用擷取�
 
 夠用就好，社群平台的穩健度才是花錢買回來的部分。
 
+## 為什麼不是用 Google Picker 選資料夾
+
+原本的設計是想用 Google 官方的 Picker 元件，讓你在擴充功能裡直接瀏覽、點選
+一個現有的 Drive 資料夾。實際做下去才發現這在 Manifest V3 擴充功能裡是一個
+**Google 自己都還沒解的限制**：
+
+- 一般擴充頁面（`options.html`）的 CSP 完全不允許載入任何遠端腳本，Picker
+  的元件一定要從 `https://apis.google.com` 載入，直接寫死會讓整個 manifest
+  被 Chrome 拒絕載入。
+- 改用 MV3 的「沙盒頁面」機制（CSP 可以放寬）繞過上一條，但沙盒頁面是
+  `null` 來源（opaque origin），而 **Google Picker 的後端伺服器會用 CORS
+  擋掉所有來自 `null` 來源的請求**——這不是我們的設定問題，Chromium 官方
+  開發者社群的討論串（[連結](https://groups.google.com/a/chromium.org/g/chromium-extensions/c/FhWI_kvDbaA)）
+  裡 Google 員工自己給的答案是「另外架一個有真實網址的網頁來跑 Picker」。
+
+這個 repo 選擇不要求你額外架站，改成：**設定頁填一個路徑字串**（例如
+`00 inbox/Clip Vault 收藏`），背景服務逐層搜尋你 Drive 裡有沒有同名資料夾，
+找不到的那一層就自動建立。因為是這個擴充自己建立的資料夾，天生就有存取
+權限，不需要 Picker 那套授權流程。
+
+**代價**：這個做法需要「查詢既有的檔案結構」這個動作，而我們原本用的
+`drive.file`（非敏感、免審查）scope 明文禁止這件事，所以這個 repo 改用完整
+的 `https://www.googleapis.com/auth/drive` scope。細節與影響見下面「OAuth
+設定」一節。
+
 ## 安裝
 
 三分鐘，不需要開發環境，也不需要 npm。
 
 1. `git clone` 這個 repo，或用 `Code → Download ZIP` 下載後解壓縮
-2. 完成下面「OAuth 設定」（Google Drive 用）與「Google Picker 設定」（選資料
-   夾用），跑 `python3 tools/build_manifest.py`
+2. 完成下面「OAuth 設定」，跑 `python3 tools/build_manifest.py`
 3. 到瀏覽器的擴充功能頁面：
    - Chrome：`chrome://extensions`
    - Vivaldi：`vivaldi://extensions`
@@ -73,13 +96,31 @@ Vivaldi、Brave、Comet 這類其他 Chromium 核心瀏覽器都沒有實作這�
 那邊沒有登記 redirect URI 的欄位，換了流程會被拒絕，出現
 `redirect_uri_mismatch`）。
 
+### 關於 scope：這次用的是完整 `drive`，不是 `drive.file`
+
+因為要支援「填一個既有路徑、自動找/建資料夾」，這個動作需要查詢你既有的
+檔案結構，而 `drive.file` scope 明文禁止查詢/列出使用者既有的檔案——它只認
+「這個擴充自己建立的」或「使用者透過 Picker 明確開過的」。Picker 在 MV3
+裡跑不起來（見上一節），所以只剩完整 `drive` scope 這條路。
+
+**這是這個專案唯一一次放棄最小權限原則**，要老實講清楚代價：
+
+- Google 會把 `https://www.googleapis.com/auth/drive` 標成「敏感」scope。
+  自己測試用（帳號在「測試使用者」名單裡）完全不受影響，只是每次授權畫面
+  會多一句「這個應用程式未經 Google 驗證」，點「進階」→「前往（App
+  名稱）」繺續即可。
+- 要正式上架給別人用的話，這個 scope 需要走 Google 的審查流程（`drive.file`
+  則不需要）。這個 repo 設計上就是給你自己 clone 下來本機用的，不打算上架
+  Chrome Web Store，所以這一點不影響使用，只是提醒你如果之後真的想公開
+  發布，這裡會是要處理的地方。
+
 ### 設定步驟
 
 1. 到 [Google Cloud Console](https://console.cloud.google.com/) 建一個專案，
-   啟用 **Google Drive API** 與 **Google Docs API**。
+   啟用 **Google Drive API**（不需要 Google Docs API 以外的其他 API）。
 2. 「OAuth 同意畫面」：使用者類型選「外部」，填 App 名稱與聯絡信箱，scope 加
-   `.../auth/drive.file`（**非敏感** scope，不需要 Google 審查，也沒有測試
-   使用者 100 人上限）。發布狀態改成「正式版」。
+   `.../auth/drive`。發布狀態留在「測試中」即可，把自己的 Google 帳號加進
+   「測試使用者」名單。
 3. 「用戶端」→「建立用戶端」→ 應用程式類型選 **「網頁應用程式」**。
 4. 先跑一次 `python3 tools/build_manifest.py`（就算 `.env` 還是空的也沒關
    係），它會印出這個 repo 固定 `key` 算出來的擴充功能 ID，例如：
@@ -100,31 +141,23 @@ Vivaldi、Brave、Comet 這類其他 Chromium 核心瀏覽器都沒有實作這�
    （這個檔案已被 `.gitignore` 排除，不會進 git 歷史——你的 GCP 專案代號不會
    留在公開 repo 的 commit 裡）。
 
-> 這組 client_id 不是機密——Google 對「公開型用戶端」的設計本來就沒有 client
-> secret，真正的安全邊界是 redirect URI 綁定跟 scope 縮小到 `drive.file`。
-> 用 `.env` 分開純粹是不想讓你的 GCP 專案代號留在公開 commit 歷史裡，跟安全
-> 性無關。
+> client_id 本身仍然不是機密——Google 對「公開型用戶端」的設計本來就沒有
+> client secret，真正的安全邊界是 redirect URI 綁定。用 `.env` 分開純粹是
+> 不想讓你的 GCP 專案代號留在公開 commit 歷史裡，跟安全性無關。
 
-## Google Picker 設定（選 Drive 資料夾用）
+## 設定 Google Drive 目的地路徑
 
-設定頁的「選擇資料夾」按鈕，是嵌入 Google 官方的
-[Picker](https://developers.google.com/workspace/drive/picker) 元件，讓你在
-擴充功能裡直接瀏覽、點選一個現有的 Drive 資料夾——不需要把 OAuth scope 擴大
-到能瀏覽整個 Drive；`drive.file` scope 底下，Picker 讓你「明確選過的東西」會
-被視為使用者主動授權的檔案，一樣維持最小權限。
+1. 設定頁按「連接 Google」完成授權（第一次會看到「未經驗證」的提示，屬於
+   正常現象，見上一節）。
+2. 在「目的地路徑」填一個路徑，例如 `00 inbox/Clip Vault 收藏`——這是你
+   **My Drive 底下的路徑**，不需要事先存在。
+3. 按「確認／建立路徑」。背景服務會從 My Drive 根目錄開始，逐層搜尋有沒有
+   同名資料夾，找不到的那一層就自動建立，最後告訴你這次實際新建了哪幾層。
+4. 之後每次收藏都直接寫進這個路徑，不用再選一次。
 
-1. 在同一個 Google Cloud 專案裡，「已啟用的 API 和服務」→ 啟用
-   **Google Picker API**。
-2. 「憑證」→「建立憑證」→「API 金鑰」（不是 OAuth client，是另一種）。
-3. 建議把這組金鑰限制在「HTTP 參照網址」：`chrome-extension://<你的擴充功能
-   ID>/*`，避免被其他網站盜用。
-4. 填進 `.env`：
-
-   ```
-   GOOGLE_PICKER_API_KEY=你的picker_api_key
-   ```
-
-5. 重跑 `python3 tools/build_manifest.py`。
+已經解析過的路徑存的是資料夾 **ID**，不是文字路徑本身——之後你在 Google
+Drive 網頁上把這個資料夾搬到別的地方，收藏功能仍然正常（Drive 認的是 ID，
+不是路徑），只是設定頁顯示的路徑文字不會跟著更新（純粹顯示用，不影響功能）。
 
 ## Obsidian 設定
 
@@ -137,6 +170,8 @@ Vivaldi、Brave、Comet 這類其他 Chromium 核心瀏覽器都沒有實作這�
 
 收藏時擴充會開一個背景分頁把 `obsidian://new?vault=...&file=...&content=...`
 丟給瀏覽器，觸發作業系統把它交給 Obsidian App，幾秒後那個分頁會自動關掉。
+**這一段完全在本機完成，不需要跑任何伺服器**——跟官方 obsidian-clipper
+需要另外裝 Local REST API 外掛、跑本機服務的做法不一樣。
 
 ### 已知限制
 
@@ -145,7 +180,7 @@ Vivaldi、Brave、Comet 這類其他 Chromium 核心瀏覽器都沒有實作這�
   允許」之後就不會再問。
 - **本機要有裝 Obsidian 桑面版**，而且該 vault 要用 Obsidian 開過至少一次
   （行動裝置、網頁版 Obsidian 都吃不到 `obsidian://` 協定）。
-- **URI 有長度上限**（隨作業系統/瀏覽器而不同，這裡保守拓 6000 字元）。內容
+- **URI 有長度上限**（隨作業系統/瀏覽器而不同，這裡保守拒 6000 字元）。內容
   超長時會自動截斷，並在檔案結尾附上原始連結，不會假裝收完了。
 
 ## 在 Vivaldi／Brave／Comet 上使用
@@ -174,7 +209,7 @@ extension/
 ├── manifest.template.json   # 佔位符版本，會 commit
 ├── manifest.json             # tools/build_manifest.py 產生，不進 git
 ├── popup.html / popup.js     # 顯示連線狀態與收藏紀錄
-├── options.html / options.js # 設定頁：Drive 連接／資料夾選擇、Obsidian 設定
+├── options.html / options.js # 設定頁：Drive 連接／路徑解析、Obsidian 設定
 ├── onboarding.html / onboarding.js
 ├── icons/
 └── src/
@@ -183,7 +218,7 @@ extension/
     ├── naming.js          # 檔名／筆記名規則（沿用 PostSync）
     ├── generic-extract.js # 通用網頁擷取（新增，輕量版）
     ├── content.js         # 浮動按鈕、右鍵選單、toast（整合社群＋通用）
-    ├── background.js      # OAuth、Drive 寫入、Obsidian 交棒、去重
+    ├── background.js      # OAuth、資料夾路徑解析、Drive 寫入、Obsidian 交棒、去重
     └── toast.css
 tools/
 └── build_manifest.py
@@ -199,8 +234,10 @@ tools/
   頁面。
 - 資料只寫進使用者自己的 Google Drive 或自己指定的 Obsidian vault；本擴充
   沒有任何自己的伺服器。
-- `drive.file` scope 之下，擴充只能看到、修改它自己建立的檔案，或使用者透過
-  Picker 明確選過的資料夾。
+- 用的是完整 `drive` scope（原因見「為什麼不是用 Google Picker」一節），
+  代表這個擴充**技術上有能力**存取你整個 Drive；但程式碼本身只在「連接
+  Google」「確認／建立路徑」「寫入收藏內容」這三個動作裡呼叫 Drive API，
+  原始碼公開可查（`extension/src/background.js`）。
 - Obsidian 目的地完全在本機完成，不經過任何網路請求。
 
 ## License

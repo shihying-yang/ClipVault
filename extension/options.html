@@ -44,12 +44,16 @@
       <button id="btnConnect" class="btn-secondary" type="button">連接 Google</button>
     </div>
 
-    <label>目的地資料夾</label>
+    <label for="driveFolderPath">目的地路徑（My Drive 底下的路徑，用「/」分層）</label>
+    <input type="text" id="driveFolderPath" placeholder="例如：00 inbox/Clip Vault 收藏" />
+    <p class="hint">
+      填你 Drive 裡既有的路徑也可以——每一層找不到同名資料夾就會自動建立那一層。
+      留空代表直接存在 My Drive 根目錄。
+    </p>
     <div class="folder-box">
-      <span id="driveFolderLabel" class="folder-name">尚未選擇資料夾</span>
-      <button id="btnPickFolder" class="btn-primary" type="button">選擇資料夾</button>
+      <span id="driveFolderLabel" class="folder-name">尚未確認路徑</span>
+      <button id="btnResolvePath" class="btn-primary" type="button">確認／建立路徑</button>
     </div>
-    <p class="hint">用 Google 官方選擇器挑一個你 Drive 裡現有的資料夾。要先按上面「連接 Google」。</p>
 
     <label for="driveTags">標籤（會寫成 Doc 開頭的一行文字，例如 #工作 #靈感）</label>
     <input type="text" id="driveTags" placeholder="工作, 靈感, 待讀" />
@@ -87,7 +91,6 @@
     <button id="btnSave" class="btn-primary" type="button">儲存設定</button>
   </div>
 
-  <iframe id="pickerSandbox" src="sandbox.html" style="display:none"></iframe>
   <script src="options.js"></script>
 </body>
 </html>

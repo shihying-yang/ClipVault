@@ -1,25 +1,23 @@
 // =====================================================
 // Clip Vault — 設定頁
 //
-// Google Picker 需要從 https://apis.google.com 載入遠端腳本，但
-// Chrome MV3 對一般擴充頁面（這裡）的 CSP 完全不允許 script-src
-// 放任何遠端網域——直接 <script src="https://apis.google.com/..."> 
-// 會讓整個 manifest 被拒絕載入。正確做法是把 Picker 相關的東西
-// 丟進一個「沙盒頁面」（sandbox.html，CSP 可以放寬），這裡只負責
-// 拿 token、跟沙盒 iframe 用 postMessage 來回傳遞資料。
+// Google Picker 在 MV3 擴充功能裡跑不起來（沙盒頁面是 null-origin，
+// Google 的伺服器會用 CORS 擋掉；一般擴充頁面又不能載入遠端腳本），
+// 這是 Google 自己都還沒解的限制，Chromium 開發者社群的官方建議是
+// 「另外架一個有真實網址的網頁」——這裡選擇不這麼做，改成讓使用者
+// 直接填路徑字串，由 background.js 逐層搜尋／自動建立資料夾。
 // =====================================================
 
 const $ = (id) => document.getElementById(id);
 
-let pickedFolderId = '';
-let pickedFolderName = '';
-let sandboxReady = false;
+let resolvedFolderId = '';
+let resolvedFolderPath = '';
 
 function showStatus(msg, ok) {
   const box = $('statusBox');
   box.textContent = msg;
   box.className = `status ${ok ? 'ok' : 'err'}`;
-  setTimeout(() => { box.className = 'status'; }, 5000);
+  setTimeout(() => { box.className = 'status'; }, 6000);
 }
 
 function sendBg(msg) {
@@ -36,15 +34,16 @@ function sendBg(msg) {
 
 async function loadSettings() {
   const s = await chrome.storage.sync.get([
-    'driveEnabled', 'driveFolderId', 'driveFolderName', 'driveTags',
+    'driveEnabled', 'driveFolderId', 'driveFolderPath', 'driveTags',
     'obsidianEnabled', 'obsidianVault', 'obsidianFolder', 'obsidianTags',
   ]);
   $('driveEnabled').checked = s.driveEnabled !== false;
   $('driveTags').value = s.driveTags || '';
-  pickedFolderId = s.driveFolderId || '';
-  pickedFolderName = s.driveFolderName || '';
-  $('driveFolderLabel').textContent = pickedFolderName
-    ? `📁 ${pickedFolderName}` : '尚未選擇資料夾';
+  $('driveFolderPath').value = s.driveFolderPath || '';
+  resolvedFolderId = s.driveFolderId || '';
+  resolvedFolderPath = s.driveFolderPath || '';
+  $('driveFolderLabel').textContent = resolvedFolderId
+    ? `📁 My Drive/${resolvedFolderPath || '（根目錄）'}` : '尚未確認路徑';
 
   $('obsidianEnabled').checked = !!s.obsidianEnabled;
   $('obsidianVault').value = s.obsidianVault || '';
@@ -75,84 +74,23 @@ $('btnConnect').addEventListener('click', async () => {
   refreshConnStatus();
 });
 
-// ── 跟沙盒 iframe 溹通 ────────────────────────
-// sandbox.html 跑在隢離環境，不能呼叫 chrome.*，所有資料都靠
-// postMessage 來回傳遞。iframe 載入完成會主動送一個 READY 訊號，
-// 避免我們在它還沒 load 完就送開啟指令而漏接。
-
-let pendingPickerResolve = null;
-let pendingPickerReject = null;
-
-window.addEventListener('message', (ev) => {
-  const msg = ev.data;
-  if (!msg || typeof msg.type !== 'string') return;
-  if (msg.type === 'CV_SANDBOX_READY') {
-    sandboxReady = true;
-    return;
-  }
-  if (msg.type === 'CV_PICKER_RESULT') {
-    pickedFolderId = msg.folderId;
-    pickedFolderName = msg.folderName;
-    $('driveFolderLabel').textContent = `📁 ${pickedFolderName}`;
-    if (pendingPickerResolve) pendingPickerResolve();
-    pendingPickerResolve = null;
-    pendingPickerReject = null;
-    return;
-  }
-  if (msg.type === 'CV_PICKER_CANCEL') {
-    if (pendingPickerResolve) pendingPickerResolve(); // 使用者自己取消，不算錯誤
-    pendingPickerResolve = null;
-    pendingPickerReject = null;
-    return;
-  }
-  if (msg.type === 'CV_PICKER_ERROR') {
-    if (pendingPickerReject) pendingPickerReject(new Error(msg.error || '未知錯誤'));
-    pendingPickerResolve = null;
-    pendingPickerReject = null;
-  }
-});
-
-function waitForSandbox(timeoutMs = 8000) {
-  if (sandboxReady) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const started = Date.now();
-    const check = setInterval(() => {
-      if (sandboxReady) {
-        clearInterval(check);
-        resolve();
-      } else if (Date.now() - started > timeoutMs) {
-        clearInterval(check);
-        reject(new Error('Picker 沙盒頁面沒有回應（檢查網路連線）'));
-      }
-    }, 100);
-  });
-}
-
-function openPickerInSandbox(token, apiKey) {
-  return new Promise((resolve, reject) => {
-    pendingPickerResolve = resolve;
-    pendingPickerReject = reject;
-    const frame = $('pickerSandbox');
-    frame.contentWindow.postMessage({ type: 'CV_OPEN_PICKER', token, apiKey }, '*');
-  });
-}
-
-$('btnPickFolder').addEventListener('click', async () => {
-  $('btnPickFolder').disabled = true;
+$('btnResolvePath').addEventListener('click', async () => {
+  $('btnResolvePath').disabled = true;
+  const path = $('driveFolderPath').value.trim();
   try {
-    const manifest = chrome.runtime.getManifest();
-    const apiKey = (manifest.x_config && manifest.x_config.picker_api_key) || '';
-    if (!apiKey || apiKey.startsWith('REPLACE_ME')) {
-      throw new Error('尚未設定 Google Picker API key（見 README 的「Google Picker 設定」）');
-    }
-    const tokenRes = await sendBg({ type: 'CLIPVAULT_GET_TOKEN' });
-    if (!tokenRes || !tokenRes.ok) throw new Error(tokenRes && tokenRes.error);
-    await waitForSandbox();
-    await openPickerInSandbox(tokenRes.token, apiKey);
+    showStatus('處理中…（找不到的資料夾層會自動建立）', true);
+    const res = await sendBg({ type: 'CLIPVAULT_RESOLVE_FOLDER', path });
+    if (!res || !res.ok) throw new Error((res && res.error) || '未知錯誤');
+    resolvedFolderId = res.folderId;
+    resolvedFolderPath = path;
+    $('driveFolderLabel').textContent = `📁 My Drive/${path || '（根目錄）'}`;
+    showStatus(res.createdSegments && res.createdSegments.length
+      ? `已建立：${res.createdSegments.join(' → ')}`
+      : '路徑已存在，直接沿用', true);
   } catch (e) {
-    showStatus(`選擇資料夾失敗：${(e && e.message) || '未知錯誤'}`, false);
+    showStatus(`路徑處理失敗：${(e && e.message) || '未知錯誤'}`, false);
   } finally {
-    $('btnPickFolder').disabled = false;
+    $('btnResolvePath').disabled = false;
   }
 });
 
@@ -166,15 +104,15 @@ $('btnSave').addEventListener('click', async () => {
     return;
   }
   const driveEnabled = $('driveEnabled').checked;
-  if (driveEnabled && !pickedFolderId) {
-    showStatus('啟用了 Google Drive 但還沒選資料夾', false);
+  if (driveEnabled && !resolvedFolderId) {
+    showStatus('啟用了 Google Drive 但還沒按「確認／建立路徑」', false);
     return;
   }
 
   await chrome.storage.sync.set({
     driveEnabled,
-    driveFolderId: pickedFolderId,
-    driveFolderName: pickedFolderName,
+    driveFolderId: resolvedFolderId,
+    driveFolderPath: resolvedFolderPath,
     driveTags: $('driveTags').value.trim(),
     obsidianEnabled,
     obsidianVault,

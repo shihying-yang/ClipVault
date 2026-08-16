@@ -2,7 +2,7 @@
 // Clip Vault — Background Service Worker v1.0
 //
 // 收到的內容往兩個目的地寫，各自獨立、互不影響：
-//   Google Drive   使用者自己在設定頁用 Google 選擇器挑的資料夾
+//   Google Drive   使用者自己在設定頁填路徑，背景服務逐層搜尋/建立出來的資料夾
 //   Obsidian       使用者自己填的 vault 名稱 + 資料夾路徑
 // 任何一邊成功就算成功。兩邊都可以同時開，也可以只開一邊。
 //
@@ -36,7 +36,7 @@ chrome.runtime.onInstalled.addListener((d) => {
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId !== MENU_ID || !tab) return;
   chrome.tabs.sendMessage(tab.id, { type: 'CLIPVAULT_CONTEXT' }, () => {
-    void chrome.runtime.lastError;
+    void chrome.runtime.lastError; // 這個分頁沒有 content script 就算了
   });
 });
 
@@ -71,14 +71,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch(() => sendResponse({ connected: false }));
     return true;
   }
-  if (msg.type === 'CLIPVAULT_GET_TOKEN') {
-    getToken(true)
-      .then((token) => sendResponse({ ok: true, token }))
+  if (msg.type === 'CLIPVAULT_RESOLVE_FOLDER') {
+    withAuthRetry((token) => resolveFolderPath(token, msg.path || ''))
+      .then((res) => sendResponse({ ok: true, ...res }))
       .catch((e) => sendResponse({ ok: false, error: errMsg(e) }));
     return true;
   }
   return false;
 });
+
+// ── 逾時與錯誤 ──────────────────────────────────────────
 
 function withTimeout(promise, ms, what) {
   let timer;
@@ -108,6 +110,9 @@ async function fetchT(url, opts = {}, ms = 45000) {
 function errMsg(e) {
   return (e && e.message) || (e && e.constructor && e.constructor.name) || '未知錯誤';
 }
+
+// ── OAuth（launchWebAuthFlow，跨 Chromium 瀏覽器）──────
+// 細節與理由見 README「在 Vivaldi／Brave／Comet 上使用」一節。
 
 function clientIdSet() {
   const m = chrome.runtime.getManifest();
@@ -219,6 +224,10 @@ async function api(token, method, url, body) {
   return res.status === 204 ? null : res.json();
 }
 
+// ── 去重 ─────────────────────────────────────────────
+// 用 permalink／頁面網址當指紋；社群貼文抓不到 permalink 時退回
+// 「平台＋作者＋內文前 200 字」，跟 PostSync 同一套邏輯。
+
 function hashStr(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
@@ -248,6 +257,8 @@ async function markSeen(key, entry) {
   await chrome.storage.local.set({ cvSeen });
 }
 
+// ── 主流程 ───────────────────────────────────────────
+
 function progress(tabId, text) {
   if (tabId == null) return;
   try {
@@ -274,7 +285,7 @@ async function handleCapture(p, force, tabId) {
   }
 
   const s = await chrome.storage.sync.get([
-    'driveEnabled', 'driveFolderId', 'driveFolderName', 'driveTags',
+    'driveEnabled', 'driveFolderId', 'driveFolderPath', 'driveTags',
     'obsidianEnabled', 'obsidianVault', 'obsidianFolder', 'obsidianTags',
   ]);
   const wantDrive = s.driveEnabled !== false && clientIdSet() && !!s.driveFolderId;
@@ -282,7 +293,7 @@ async function handleCapture(p, force, tabId) {
 
   if (!wantDrive && !wantObsidian) {
     const m = 'Drive 與 Obsidian 都沒有設定好，沒有地方可以寫。'
-      + '請點擴充圖示打開設定，至少完成一邊（Drive 要選資料夾、Obsidian 要填 vault 名稱）。';
+      + '請點擴充圖示打開設定，至少完成一邊（Drive 要確認路徑、Obsidian 要填 vault 名稱）。';
     await logEntry({ ok: false, msg: m, time: Date.now() });
     badge(false);
     return { ok: false, error: m };
@@ -340,6 +351,10 @@ async function handleCapture(p, force, tabId) {
   return { ok: true, bits, firstUrl: drive ? drive.docUrl : '' };
 }
 
+// ── Google Drive ───────────────────────────────
+// 資料夾是從 resolveFolderPath() 解析出來的（見下方），使用者在設定頁
+// 填路徑、逐層搜尋/自動建立。
+
 async function writeDrive(token, p, s, tabId) {
   progress(tabId, `建立 Doc（${p.text.length.toLocaleString()} 字）…`);
   const doc = await createDoc(token, s.driveFolderId, p, s.driveTags);
@@ -354,6 +369,59 @@ async function writeDrive(token, p, s, tabId) {
     docUrl: `https://docs.google.com/document/d/${doc.docId}/edit`,
     imgNote,
   };
+}
+
+// ── 資料夾路徑解析 ─────────────────────────────
+// Google Picker 在 MV3 擴充功能裡跑不起來（沙盒頁面是 null-origin，
+// 會被 Google 的 CORS 擋掉；一般擴充頁面又不能載入遠端腳本），這是
+// Google 自己都還沒解的限制。改成讓使用者填路徑字串，這裡逐層搜尋，
+// 找不到的那一層就自動建立——因為是這個擴充自己建立的，天生就有
+// 存取權限，不需要額外的授權流程。
+
+function escapeQ(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+async function findChildFolder(token, parentId, name) {
+  const q = `name='${escapeQ(name)}' and mimeType='application/vnd.google-apps.folder'`
+    + ` and '${parentId}' in parents and trashed=false`;
+  const res = await api(
+    token, 'GET',
+    `${DRIVE}/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=1`,
+  );
+  const files = res.files || [];
+  return files[0] || null;
+}
+
+async function createChildFolder(token, parentId, name) {
+  const f = await api(token, 'POST', `${DRIVE}/files?fields=id,name`, {
+    name,
+    mimeType: 'application/vnd.google-apps.folder',
+    parents: [parentId],
+  });
+  return f;
+}
+
+// path 例如 "00 inbox/Clip Vault 收藏"；空字串代表 My Drive 根目錄。
+// 逐層搜尋，找不到就建立，回傳最終那一層的 folderId，以及這次實際
+// 建立了哪幾層（讓設定頁能告訴使用者「這幾層是新建的」，不要含糊帶過）。
+async function resolveFolderPath(token, path) {
+  const segments = String(path || '')
+    .split('/')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  let parentId = 'root';
+  const createdSegments = [];
+  for (const seg of segments) {
+    let found = await findChildFolder(token, parentId, seg);
+    if (!found) {
+      found = await createChildFolder(token, parentId, seg);
+      createdSegments.push(seg);
+    }
+    parentId = found.id;
+  }
+  return { folderId: parentId, createdSegments };
 }
 
 async function createDoc(token, folderId, p, tags) {
@@ -407,6 +475,8 @@ async function docEnd(token, docId) {
   return last ? last.endIndex - 1 : 1;
 }
 
+// 圖片嵌入沿用 PostSync 驗證過的兩層做法：先讓 Docs API 直接抓網址，
+// 被擋（時效簽章網址、host 被防盃連擋）就自己下載再經 Drive 轉一手。
 async function insertOneImage(token, docId, uri) {
   const at = await docEnd(token, docId);
   await api(token, 'POST', `${DOCS}/documents/${docId}:batchUpdate`, {
@@ -483,6 +553,16 @@ async function insertImages(token, docId, folderId, urls, tabId) {
   return failed.length ? `圖 ${done}/${urls.length}` : '';
 }
 
+// ── Obsidian ─────────────────────────────────
+// 走 Obsidian 原生的 obsidian://new URI（不需要 Advanced URI 外掛）。
+// 開一個分頁把 URI 丟給作業系統，讓它交棒給 Obsidian App，
+// 短暫延遲後把那個分頁關掉——它只是個信差，不需要留著。
+//
+// 已知限制：第一次執行瀏覽器會跳出「是否要開啟 Obsidian？」的系統確認框，
+// 這是外部協定處理的正常行為，沒辦法從擴充這邊繞過去；勾選瀏覽器提供的
+// 「一律允許」之後就不會再跳。URI 長度也有上限（隨作業系統/瀏覽器而不同，
+// 大約幾千字元），超長的內容會被截斷並在檔案結尾加註記，不會假裝收完了。
+
 const OBSIDIAN_URI_SAFE_LEN = 6000;
 
 async function writeObsidian(p, s) {
@@ -528,6 +608,8 @@ async function writeObsidian(p, s) {
   return { fileName, filePath };
 }
 
+// ── 命名（跟社群貼文共用同一套規則，見 naming.js）────
+
 function topicOf(p) {
   if (self.CLIP_VAULT_NAME && p.platform !== 'web') {
     return self.CLIP_VAULT_NAME.topicOf(p);
@@ -549,6 +631,8 @@ function sanitizeName(s) {
     .trim()
     .slice(0, 40);
 }
+
+// ── 工具 ─────────────────────────────────────────────
 
 function cleanText(s) {
   return String(s || '')
