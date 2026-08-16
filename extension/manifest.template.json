@@ -17,7 +17,7 @@
   "oauth2": {
     "client_id": "REPLACE_ME_WITH_YOUR_OWN_CLIENT_ID.apps.googleusercontent.com",
     "scopes": [
-      "https://www.googleapis.com/auth/drive"
+      "https://www.googleapis.com/auth/drive.file"
     ]
   },
   "background": {

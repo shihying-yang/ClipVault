@@ -80,8 +80,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return false;
 });
 
-// ── 逾時與錯誤 ──────────────────────────────────────────
-
 function withTimeout(promise, ms, what) {
   let timer;
   return Promise.race([
@@ -372,11 +370,19 @@ async function writeDrive(token, p, s, tabId) {
 }
 
 // ── 資料夾路徑解析 ─────────────────────────────
-// Google Picker 在 MV3 擴充功能裡跑不起來（沙盒頁面是 null-origin，
-// 會被 Google 的 CORS 擋掉；一般擴充頁面又不能載入遠端腳本），這是
-// Google 自己都還沒解的限制。改成讓使用者填路徑字串，這裡逐層搜尋，
-// 找不到的那一層就自動建立——因為是這個擴充自己建立的，天生就有
-// 存取權限，不需要額外的授權流程。
+// Google Picker 在 MV3 擴充功能裡跑不起來（見 README「為什麼不是用
+// Google Picker」），改成讓使用者填路徑字串，這裡逐層搜尋、自動建立。
+//
+// 這整段刻意只用 drive.file scope（不擴大成完整 drive）：
+// files.list 底下的查詢在 drive.file scope 一樣能呼叫，只是回傳範圍
+// 被限縮在「這個擴充自己建立過的檔案」——查得到的，一定是它自己建的，
+// 天生就有存取權限，重複使用不會有問題。
+//
+// 唯一的限制：如果路徑裡某一層是使用者手動在 Drive 網頁上建立、
+// 這個擴充從沒碰過的既有資料夾，這裡的搜尋找不到它（不是報錯，是
+// 查得到「沒有」），會被當成不存在而另外新建一個同名的——不是接上
+// 既有那一個。第一次設定路徑時如果填全新路徑就完全不受影響；
+// 之後每次都會正確重複使用同一個。
 
 function escapeQ(s) {
   return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
