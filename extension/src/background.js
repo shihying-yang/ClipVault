@@ -606,9 +606,24 @@ async function writeObsidian(p, s) {
     uri = `obsidian://new?${params.toString()}&content=${encodeURIComponent(content)}`;
   }
 
-  const tab = await chrome.tabs.create({ url: uri, active: false });
+  // 記錄目前作用中的分頁，交接完後要把焦點還回去
+  let originId = null;
+  try {
+    const [cur] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    originId = cur && cur.id;
+  } catch (_) { /* 拿不到就算了，不影響主流程 */ }
+
+  // 外部協定（obsidian://）的「是否要開啟外部應用程式」確認框，Chromium
+  // 系瀏覽器只認「目前作用中（active）」的分頁——背景分頁（active:false）
+  // 觸發外部協定常常會被直接非声静點忽略，連確認框都不會跳出來，Obsidian
+  // 也就永遠不會被叫起來，但這裡完全不會產生任何錯誤或例外。
+  // 所以這裡短暫搞一下焦點讓協定交接成功，關閉分頁後再把焦點還回去。
+  const tab = await chrome.tabs.create({ url: uri, active: true });
   setTimeout(() => {
     chrome.tabs.remove(tab.id, () => void chrome.runtime.lastError);
+    if (originId != null) {
+      chrome.tabs.update(originId, { active: true }, () => void chrome.runtime.lastError);
+    }
   }, 1500);
 
   return { fileName, filePath };
