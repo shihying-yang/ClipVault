@@ -29,6 +29,14 @@
         "http://*/*",
         "https://*/*"
       ],
+      "exclude_matches": [
+        "https://accounts.google.com/*",
+        "https://*.accounts.google.com/*",
+        "https://myaccount.google.com/*",
+        "https://content.googleapis.com/*",
+        "https://docs.google.com/*",
+        "https://drive.google.com/*"
+      ],
       "js": [
         "src/adapters.js",
         "src/extract.js",
