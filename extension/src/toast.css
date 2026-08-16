@@ -36,6 +36,32 @@
   border-radius: 8px;
 }
 
+.clipvault-post-btn {
+  position: absolute !important;
+  top: 8px !important;
+  right: 8px !important;
+  z-index: 2147483646 !important;
+  display: block;
+  margin: 0 !important;
+  padding: 5px 11px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: #1e1b3a !important;
+  color: #ffffff !important;
+  font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  line-height: 1.4 !important;
+  white-space: nowrap;
+  cursor: pointer !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+  opacity: 0.85;
+  transition: opacity 0.12s, transform 0.12s;
+}
+
+.clipvault-post-btn:hover { opacity: 1 !important; transform: translateY(-1px); }
+.clipvault-post-btn:disabled { opacity: 0.45 !important; cursor: default !important; transform: none; }
+
 .clipvault-toast {
   pointer-events: none;
   position: fixed !important;

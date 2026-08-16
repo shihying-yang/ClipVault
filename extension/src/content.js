@@ -10,7 +10,10 @@
 // 不做逐項診斷面板——夠用就好，社群那五個平台的穩健度才是
 // 從 PostSync 原封不動繼承過來的部分。
 //
-// 觸發一律是人按的（浮動按鈕、右鍵選單、快速鍵），沒有任何
+// 社群平台的收藏鈕直接嵌在每一則貼文右上角（跟 PostSync 一樣），
+// 通用頁面則維持右下角單顆浮動按鈕（沒有「貼文清單」這個概念）。
+//
+// 觸發一律是人按的（貼文按鈕、浮動按鈕、右鍵選單、快速鍵），沒有任何
 // 自動收集、也不會自己捲動頁面。
 // =====================================================
 
@@ -32,6 +35,43 @@
   function refreshPosts() {
     if (!ad) return;
     posts = EX.outermost(ad, document);
+    syncPostButtons();
+  }
+
+  // ── 貼文自帶按鈕（社群頁面）──────────────────
+  // 每則偵測到的貼文右上角各嵌一顆小按鈕，跟著貼文本身捲動，
+  // 不用像單顆浮動按鈕那樣算座標追蹤 active 貼文。
+
+  const postButtons = new WeakMap();
+
+  function ensurePostBtn(post) {
+    let b = postButtons.get(post);
+    if (b && document.contains(b)) return b;
+    b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'clipvault-post-btn';
+    b.textContent = '⚡ 收這篇';
+    b.title = '存進 Clip Vault';
+    b.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      capture(post);
+    });
+    if (getComputedStyle(post).position === 'static') {
+      post.style.position = 'relative';
+    }
+    post.appendChild(b);
+    postButtons.set(post, b);
+    return b;
+  }
+
+  function syncPostButtons() {
+    const live = new Set(posts);
+    for (const post of posts) ensurePostBtn(post);
+    for (const b of document.querySelectorAll('.clipvault-post-btn')) {
+      const owner = b.parentElement;
+      if (!owner || !live.has(owner)) b.remove();
+    }
   }
 
   function rejectReason(r) {
@@ -78,7 +118,7 @@
     btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'clipvault-btn';
-    btn.textContent = ad ? '⚡ 收這篇' : '⚡ 收藏';
+    btn.textContent = '⚡ 收藏';
     btn.title = '存進 Clip Vault';
     btn.addEventListener('click', (ev) => {
       ev.preventDefault();
@@ -90,31 +130,16 @@
     return btn;
   }
 
+  // 社群頁面改用貼文自帶按鈕（見 ensurePostBtn），這裡只剩通用頁面
+  // 那顆右下角固定浮動按鈕要處理；ad 頁面完全不建立這顆按鈕。
   function position() {
+    if (ad) return;
     const b = ensureBtn();
-    if (ad) {
-      if (!active) {
-        b.style.display = 'none';
-        return;
-      }
-      b.style.display = 'block';
-      const r = active.getBoundingClientRect();
-      const w = b.offsetWidth || 96;
-      const h = b.offsetHeight || 32;
-      let left = r.right + 10;
-      if (left + w > window.innerWidth - 8) left = Math.max(8, r.right - w - 10);
-      const top = Math.min(Math.max(r.top + 10, 64), window.innerHeight - h - 16);
-      b.style.left = `${Math.round(left)}px`;
-      b.style.top = `${Math.round(top)}px`;
-      b.style.right = '';
-      b.style.bottom = '';
-    } else {
-      b.style.display = 'block';
-      b.style.left = '';
-      b.style.top = '';
-      b.style.right = '18px';
-      b.style.bottom = '18px';
-    }
+    b.style.display = 'block';
+    b.style.left = '';
+    b.style.top = '';
+    b.style.right = '18px';
+    b.style.bottom = '18px';
   }
 
   let ticking = false;

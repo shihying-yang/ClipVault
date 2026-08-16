@@ -1,5 +1,5 @@
 // =====================================================
-// Clip Vault — 抽取層
+// Clip Vault — 擷取層
 //
 // 從 content.js 抽出來的原因只有一個：這是整支擴充最會壞的地方。
 // 臉書一改版就可能整組錨點落空，而「抓到半篇」不會有任何錯誤訊息，
@@ -79,7 +79,7 @@
   }
 
   const BASE_EXCLUDE = '[contenteditable="true"], textarea, input, script, style, svg,'
-    + ' .clipvault-btn, .clipvault-toast, [role="menu"], [role="menuitem"],'
+    + ' .clipvault-btn, .clipvault-post-btn, .clipvault-toast, [role="menu"], [role="menuitem"],'
     + ' [role="tablist"], [role="progressbar"], [aria-hidden="true"]';
 
   const INVISIBLE = /[­͏​-‏⁠-⁤⁪-⁯﻿]/g;
