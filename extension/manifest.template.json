@@ -1,0 +1,70 @@
+{
+  "manifest_version": 3,
+  "name": "Clip Vault — 網頁收藏器",
+  "version": "1.0.0",
+  "description": "任何網頁選取文字或整頁，一鍵存進你自己的 Google Drive 或 Obsidian vault。社群平台（Facebook/Threads/X/Instagram/LinkedIn）走專用擷取，其他網頁走通用擷取。",
+  "permissions": [
+    "storage",
+    "identity",
+    "contextMenus",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "oauth2": {
+    "client_id": "REPLACE_ME_WITH_YOUR_OWN_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.file"
+    ]
+  },
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "src/adapters.js",
+        "src/extract.js",
+        "src/generic-extract.js",
+        "src/content.js"
+      ],
+      "css": [
+        "src/toast.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "capture-clip": {
+      "description": "收錄目前選取內容或整頁（預設沒有綁鍵，可在瀏覽器的擴充功能快速鍵頁面自己設）"
+    }
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "options.html",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "x_config": {
+    "picker_api_key": "REPLACE_ME_WITH_YOUR_PICKER_API_KEY"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuHfprNVEnPMbbqWkXuNE2FGTf4T+4aFcaJQg+Tz+I7Hfbirios1hFUkFjJeAlWsTNLZ/2Qy1v1jK/7x9ZEfzoJqEyomJJwdoOscu8r49BJLDRkygiOvHF8wKdRlnSVmEk/ZR8J9KdDGy3RH1WO69t7qsOmXWMD8mFABML3RxmmRe0otmkkoZHPiR90ATbfI0dS8BOyHMKyZ9CxU4W7Md5tJL/VzVZXdYJq5fSLSdL3kDOH6bCFuKFAFXmKctT+OMsZ6Eo5uRJXMGhe/npE//ayq+ffqoravpuwC7AC3NwNh6cDndNCP4PN3n4aQ/ER1nA2IHrH8X7+FpV92c1UaU/wIDAQAB",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' https://apis.google.com; object-src 'self'"
+  }
+}

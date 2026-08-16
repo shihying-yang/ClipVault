@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<title>Clip Vault</title>
+<style>
+  body { width: 300px; font: 13.5px/1.5 -apple-system, "Segoe UI", sans-serif; margin: 0; padding: 14px; color: #1c1c1c; }
+  h1 { font-size: 15px; margin: 0 0 10px; }
+  .row { display: flex; align-items: center; justify-content: space-between; margin: 6px 0; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .dot.on { background: #137333; }
+  .dot.off { background: #bbb; }
+  button.link { background: none; border: none; color: #1a73e8; cursor: pointer; font-size: 13px; padding: 0; }
+  .log { margin-top: 12px; max-height: 180px; overflow-y: auto; border-top: 1px solid #eee; padding-top: 8px; }
+  .log-item { padding: 6px 0; border-bottom: 1px solid #f2f2f2; font-size: 12.5px; }
+  .log-item.fail { color: #c5221f; }
+  .log-empty { color: #999; text-align: center; padding: 14px 0; }
+  a { color: #1a73e8; }
+</style>
+</head>
+<body>
+  <h1>⚡ Clip Vault</h1>
+  <div class="row">
+    <span><span id="driveDot" class="dot off"></span>Google Drive</span>
+  </div>
+  <div class="row">
+    <span><span id="obsDot" class="dot off"></span>Obsidian</span>
+  </div>
+  <div class="row">
+    <button id="btnOptions" class="link" type="button">⚙️ 開啟設定</button>
+  </div>
+  <div id="log" class="log"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

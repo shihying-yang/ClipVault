@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<title>Clip Vault 設定</title>
+<style>
+  body { font: 14px/1.6 -apple-system, "Segoe UI", sans-serif; max-width: 640px; margin: 32px auto; padding: 0 20px; color: #1c1c1c; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  h2 { font-size: 16px; margin-top: 32px; border-bottom: 1px solid #e2e2e2; padding-bottom: 6px; }
+  .sub { color: #666; margin-bottom: 24px; }
+  fieldset { border: 1px solid #e2e2e2; border-radius: 8px; padding: 16px 18px; margin-top: 14px; }
+  legend { padding: 0 6px; font-weight: 600; }
+  label { display: block; margin: 10px 0 4px; font-weight: 500; }
+  input[type="text"] { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .row input[type="checkbox"] { width: 18px; height: 18px; }
+  button { cursor: pointer; border: none; border-radius: 6px; padding: 9px 16px; font-size: 14px; font-weight: 600; }
+  .btn-primary { background: #1a73e8; color: #fff; }
+  .btn-primary:hover { background: #1558b0; }
+  .btn-secondary { background: #f1f3f4; color: #1c1c1c; }
+  .btn-secondary:hover { background: #e2e5e7; }
+  .hint { font-size: 12.5px; color: #777; margin-top: 4px; }
+  .folder-box { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .folder-name { flex: 1; padding: 8px 10px; background: #f7f7f7; border-radius: 6px; color: #444; }
+  .status { font-size: 13px; margin-top: 10px; padding: 8px 10px; border-radius: 6px; display: none; }
+  .status.ok { display: block; background: #e6f4ea; color: #137333; }
+  .status.err { display: block; background: #fce8e6; color: #c5221f; }
+  .save-bar { position: sticky; bottom: 0; background: #fff; padding: 14px 0; margin-top: 24px; border-top: 1px solid #e2e2e2; }
+</style>
+</head>
+<body>
+  <h1>⚡ Clip Vault 設定</h1>
+  <p class="sub">資料夾與標籤只需要設定一次，之後每次收藏都會直接套用。</p>
+
+  <fieldset>
+    <legend>Google Drive</legend>
+    <div class="row">
+      <input type="checkbox" id="driveEnabled" />
+      <label for="driveEnabled" style="margin:0;">啟用 Google Drive</label>
+    </div>
+
+    <div id="driveConnBox" class="folder-box">
+      <span id="driveConnStatus" class="folder-name">尚未連接 Google</span>
+      <button id="btnConnect" class="btn-secondary" type="button">連接 Google</button>
+    </div>
+
+    <label>目的地資料夾</label>
+    <div class="folder-box">
+      <span id="driveFolderLabel" class="folder-name">尚未選擇資料夾</span>
+      <button id="btnPickFolder" class="btn-primary" type="button">選擇資料夾</button>
+    </div>
+    <p class="hint">用 Google 官方選擇器挑一個你 Drive 裡現有的資料夾。要先按上面「連接 Google」。</p>
+
+    <label for="driveTags">標籤（會寫成 Doc 開頭的一行文字，例如 #工作 #靈感）</label>
+    <input type="text" id="driveTags" placeholder="工作, 靈感, 待讀" />
+    <p class="hint">用空格或逗號分開多個標籤，# 不用自己打，會自動加上。</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Obsidian</legend>
+    <div class="row">
+      <input type="checkbox" id="obsidianEnabled" />
+      <label for="obsidianEnabled" style="margin:0;">啟用 Obsidian</label>
+    </div>
+
+    <label for="obsidianVault">Vault 名稱</label>
+    <input type="text" id="obsidianVault" placeholder="例如：我的筆記" />
+    <p class="hint">要跟 Obsidian 裡「開啟資料夾為 Vault」時顯示的名稱完全一樣。</p>
+
+    <label for="obsidianFolder">資料夾路徑（vault 內的相對路徑，留空就存在根目錄）</label>
+    <input type="text" id="obsidianFolder" placeholder="例如：00_inbox/clip-vault" />
+
+    <label for="obsidianTags">標籤（會寫成筆記第二行，例如 #工作 #靈感）</label>
+    <input type="text" id="obsidianTags" placeholder="工作, 靈感, 待讀" />
+
+    <p class="hint">
+      收藏時會開一個分頁把內容交給 Obsidian App（走 <code>obsidian://new</code>），
+      分頁本身幾秒後會自動關掉。第一次執行瀏覽器會問「是否要開啟 Obsidian？」，
+      這是正常的外部協定處理，勾選「一律允許」之後就不會再跳。
+      本機要有安裝 Obsidian 桑面版，而且該 vault 要開過至少一次。
+    </p>
+  </fieldset>
+
+  <div id="statusBox" class="status"></div>
+
+  <div class="save-bar">
+    <button id="btnSave" class="btn-primary" type="button">儲存設定</button>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

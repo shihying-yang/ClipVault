@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<title>歡迎使用 Clip Vault</title>
+<style>
+  body { font: 15px/1.7 -apple-system, "Segoe UI", sans-serif; max-width: 600px; margin: 60px auto; padding: 0 24px; color: #1c1c1c; }
+  h1 { font-size: 24px; }
+  ol { padding-left: 20px; }
+  li { margin-bottom: 10px; }
+  button { margin-top: 20px; background: #1a73e8; color: #fff; border: none; border-radius: 6px; padding: 10px 20px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  code { background: #f1f3f4; padding: 1px 6px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <h1>⚡ 歡迎使用 Clip Vault</h1>
+  <p>在任何網頁選取文字或整頁，一鍵存進你的 Google Drive 或 Obsidian。
+  在 Facebook / Threads / X / Instagram / LinkedIn 上會自動用專用的貼文擷取邏輯。</p>
+  <ol>
+    <li>點右上角的擴充功能圖示 → <b>⚙️ 開啟設定</b></li>
+    <li>要用 Google Drive：先按<b>「連接 Google」</b>，再按<b>「選擇資料夾」</b>挑一個現有資料夾</li>
+    <li>要用 Obsidian：填入 <b>Vault 名稱</b>（跟 Obsidian 裡顯示的一模一樣）跟資料夾路徑</li>
+    <li>兩邊都可以填標籤，收藏時會自動加在內容開頭</li>
+    <li>到任何網頁，右鍵選<b>「⚡ 收藏到 Clip Vault」</b>，或按右下角浮動的<b>「⚡ 收藏」</b>按鈕</li>
+  </ol>
+  <p style="color:#777; font-size: 13px;">
+    第一次用 Obsidian 目的地時，瀏覽器會跳出「是否開啟 Obsidian？」的系統提示，
+    這是正常的外部協定處理，勾「一律允許」之後就不會再問。
+  </p>
+  <button id="go">前往設定</button>
+  <script src="onboarding.js"></script>
+</body>
+</html>
