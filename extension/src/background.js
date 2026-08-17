@@ -675,27 +675,34 @@ async function writeLocal(p, s) {
     '',
   ].filter((l, i) => !(i === 1 && !l)).join('\n');
 
-  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
+  // service worker 裡不是每一個 Chromium 分支都實作了 URL.createObjectURL
+  // （有些版本直接是 undefined），所以不用 Blob，改用 data: URI——純字串，
+  // 不依賴任何 Blob API，所有 Chromium 系 service worker 都保證能用。
+  const url = `data:text/markdown;charset=utf-8;base64,${utf8ToBase64(content)}`;
 
-  try {
-    await new Promise((resolve, reject) => {
-      chrome.downloads.download(
-        { url, filename: filePath, conflictAction: 'uniquify', saveAs: false },
-        (id) => {
-          if (chrome.runtime.lastError || id == null) {
-            reject(new Error((chrome.runtime.lastError && chrome.runtime.lastError.message) || '下載失敗'));
-            return;
-          }
-          resolve(id);
-        },
-      );
-    });
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-  }
+  await new Promise((resolve, reject) => {
+    chrome.downloads.download(
+      { url, filename: filePath, conflictAction: 'uniquify', saveAs: false },
+      (id) => {
+        if (chrome.runtime.lastError || id == null) {
+          reject(new Error((chrome.runtime.lastError && chrome.runtime.lastError.message) || '下載失敗'));
+          return;
+        }
+        resolve(id);
+      },
+    );
+  });
 
   return { fileName, filePath };
+}
+
+// btoa 只吃 Latin1 二進位字串，中文字直接餐進去會炸；先用 TextEncoder
+// 轉成 UTF-8 位元組，再逐位元組轉成 Latin1 字串餐給 btoa。
+function utf8ToBase64(str) {
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
 }
 
 // ── 命名（跟社群貼文共用同一套規則，見 naming.js）────
