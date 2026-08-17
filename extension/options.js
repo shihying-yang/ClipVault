@@ -36,6 +36,7 @@ async function loadSettings() {
   const s = await chrome.storage.sync.get([
     'driveEnabled', 'driveFolderId', 'driveFolderPath', 'driveTags',
     'obsidianEnabled', 'obsidianVault', 'obsidianFolder', 'obsidianTags',
+    'localEnabled', 'localFolder', 'localTags',
   ]);
   $('driveEnabled').checked = s.driveEnabled !== false;
   $('driveTags').value = s.driveTags || '';
@@ -49,6 +50,10 @@ async function loadSettings() {
   $('obsidianVault').value = s.obsidianVault || '';
   $('obsidianFolder').value = s.obsidianFolder || '';
   $('obsidianTags').value = s.obsidianTags || '';
+
+  $('localEnabled').checked = !!s.localEnabled;
+  $('localFolder').value = s.localFolder || 'ClipVault';
+  $('localTags').value = s.localTags || '';
 
   refreshConnStatus();
 }
@@ -86,7 +91,7 @@ $('btnResolvePath').addEventListener('click', async () => {
     $('driveFolderLabel').textContent = `📁 My Drive/${path || '（根目錄）'}`;
     showStatus(res.createdSegments && res.createdSegments.length
       ? `已建立：${res.createdSegments.join(' → ')}`
-      : '路徑已存在，直接沿用', true);
+      : '路徑已存在，直接沒用', true);
   } catch (e) {
     showStatus(`路徑處理失敗：${(e && e.message) || '未知錯誤'}`, false);
   } finally {
@@ -94,7 +99,7 @@ $('btnResolvePath').addEventListener('click', async () => {
   }
 });
 
-// ── 儲存 ────────────────────────────────────────
+// ── 儲存 ──────────────────────────
 
 $('btnSave').addEventListener('click', async () => {
   const obsidianEnabled = $('obsidianEnabled').checked;
@@ -118,6 +123,9 @@ $('btnSave').addEventListener('click', async () => {
     obsidianVault,
     obsidianFolder: $('obsidianFolder').value.trim(),
     obsidianTags: $('obsidianTags').value.trim(),
+    localEnabled: $('localEnabled').checked,
+    localFolder: $('localFolder').value.trim() || 'ClipVault',
+    localTags: $('localTags').value.trim(),
   });
   showStatus('設定已儲存', true);
 });

@@ -85,6 +85,26 @@
     </p>
   </fieldset>
 
+  <fieldset>
+    <legend>本機 Markdown 檔案</legend>
+    <div class="row">
+      <input type="checkbox" id="localEnabled" />
+      <label for="localEnabled" style="margin:0;">啟用本機 Markdown 檔案</label>
+    </div>
+
+    <label for="localFolder">儲存子資料夾（在瀏覽器「下載」資料夾底下）</label>
+    <input type="text" id="localFolder" placeholder="ClipVault" />
+
+    <label for="localTags">標籤（會寫成檔案第二行，例如 #工作 #靈感）</label>
+    <input type="text" id="localTags" placeholder="工作, 靈感, 待讀" />
+
+    <p class="hint">
+      直接下載成一個 <code>.md</code> 檔案，存到「下載/（上面填的子資料夾）」底下，
+      不需要任何帳號、不需要安裝任何 App——適合不想處理 Google 授權或沒裝 Obsidian 的情況。
+      跟 Drive／Obsidian 一樣可以獨立開關，三個目的地互不影響、可以同時開。
+    </p>
+  </fieldset>
+
   <div id="statusBox" class="status"></div>
 
   <div class="save-bar">

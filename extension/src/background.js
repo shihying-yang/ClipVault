@@ -285,13 +285,16 @@ async function handleCapture(p, force, tabId) {
   const s = await chrome.storage.sync.get([
     'driveEnabled', 'driveFolderId', 'driveFolderPath', 'driveTags',
     'obsidianEnabled', 'obsidianVault', 'obsidianFolder', 'obsidianTags',
+    'localEnabled', 'localFolder', 'localTags',
   ]);
   const wantDrive = s.driveEnabled !== false && clientIdSet() && !!s.driveFolderId;
   const wantObsidian = !!s.obsidianEnabled && !!s.obsidianVault;
+  const wantLocal = !!s.localEnabled;
 
-  if (!wantDrive && !wantObsidian) {
-    const m = 'Drive 與 Obsidian 都沒有設定好，沒有地方可以寫。'
-      + '請點擴充圖示打開設定，至少完成一邊（Drive 要確認路徑、Obsidian 要填 vault 名稱）。';
+  if (!wantDrive && !wantObsidian && !wantLocal) {
+    const m = 'Drive、Obsidian、本機檔案都沒有設定好，沒有地方可以寫。'
+      + '請點擴充圖示打開設定，至少完成一邊（Drive 要確認路徑、Obsidian 要填 vault 名稱，'
+      + '本機檔案只要打開開關就好）。';
     await logEntry({ ok: false, msg: m, time: Date.now() });
     badge(false);
     return { ok: false, error: m };
@@ -319,7 +322,18 @@ async function handleCapture(p, force, tabId) {
     }
   }
 
-  const ok = !!(drive || obs);
+  let local = null;
+  let localError = '';
+  if (wantLocal) {
+    try {
+      progress(tabId, '存成本機 Markdown…');
+      local = await writeLocal(p, s);
+    } catch (e) {
+      localError = errMsg(e);
+    }
+  }
+
+  const ok = !!(drive || obs || local);
   if (ok) {
     await markSeen(key, {
       t: Date.now(),
@@ -336,6 +350,9 @@ async function handleCapture(p, force, tabId) {
   if (obs) bits.push(`Obsidian「${obs.fileName}」`);
   else if (obsError) bits.push(`Obsidian 失敗：${obsError}`);
   else if (s.obsidianEnabled) bits.push('Obsidian 尚未設定 vault');
+
+  if (local) bits.push(`本機檔案「${local.filePath}」`);
+  else if (localError) bits.push(`本機檔案失敗：${localError}`);
 
   await logEntry({
     ok,
@@ -615,7 +632,7 @@ async function writeObsidian(p, s) {
 
   // 外部協定（obsidian://）的「是否要開啟外部應用程式」確認框，Chromium
   // 系瀏覽器只認「目前作用中（active）」的分頁——背景分頁（active:false）
-  // 觸發外部協定常常會被直接非声静點忽略，連確認框都不會跳出來，Obsidian
+  // 觸發外部協定常常會被直接靜點忽略，連確認框都不會跳出來，Obsidian
   // 也就永遠不會被叫起來，但這裡完全不會產生任何錯誤或例外。
   // 所以這裡短暫搞一下焦點讓協定交接成功，關閉分頁後再把焦點還回去。
   const tab = await chrome.tabs.create({ url: uri, active: true });
@@ -625,6 +642,58 @@ async function writeObsidian(p, s) {
       chrome.tabs.update(originId, { active: true }, () => void chrome.runtime.lastError);
     }
   }, 1500);
+
+  return { fileName, filePath };
+}
+
+// ── 本機 Markdown 檔案 ─────────────────
+// 完全不需要帳號、不需要外部 App——直接用 chrome.downloads 存成一個
+// .md 檔案到瀏覽器「下載」資料夾底下的子資料夾。適合不想處理 Google
+// 授權、或沒有裝 Obsidian 的情況；跟 Drive／Obsidian 一樣可以獨立開關。
+//
+// 內容格式跟 Obsidian 那份一致（標題／標籤／作者時間／原文連結／內文），
+// 圖片一樣不內嵌（只有 Drive 那條路會把圖嵌進 Doc 裡）。
+
+async function writeLocal(p, s) {
+  const topic = topicOf(p);
+  const fileName = `${docStem(p)}.md`;
+  const folder = String(s.localFolder || 'ClipVault').trim().replace(/^\/+|\/+$/g, '') || 'ClipVault';
+  const filePath = `${folder}/${fileName}`;
+
+  const tags_ = tagLine(s.localTags);
+  const meta = `${p.author || p.platformLabel}${p.timeText ? `・${p.timeText}` : ''}・收錄於 ${dateTimeStr()}`;
+  const link = p.permalink ? p.permalink : `（收錄自：${p.pageUrl || ''}）`;
+
+  const content = [
+    `# ${topic}`,
+    tags_,
+    '',
+    meta,
+    link,
+    '',
+    cleanText(p.text),
+    '',
+  ].filter((l, i) => !(i === 1 && !l)).join('\n');
+
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+
+  try {
+    await new Promise((resolve, reject) => {
+      chrome.downloads.download(
+        { url, filename: filePath, conflictAction: 'uniquify', saveAs: false },
+        (id) => {
+          if (chrome.runtime.lastError || id == null) {
+            reject(new Error((chrome.runtime.lastError && chrome.runtime.lastError.message) || '下載失敗'));
+            return;
+          }
+          resolve(id);
+        },
+      );
+    });
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
 
   return { fileName, filePath };
 }
