@@ -680,7 +680,7 @@ async function writeLocal(p, s) {
   // 不依賴任何 Blob API，所有 Chromium 系 service worker 都保證能用。
   const url = `data:text/markdown;charset=utf-8;base64,${utf8ToBase64(content)}`;
 
-  const downloadId = await new Promise((resolve, reject) => {
+  const startDownload = new Promise((resolve, reject) => {
     chrome.downloads.download(
       { url, filename: filePath, conflictAction: 'uniquify', saveAs: false },
       (id) => {
@@ -692,6 +692,9 @@ async function writeLocal(p, s) {
       },
     );
   });
+  // download() 的 callback 理論上一定會被呼叫，但保險起見還是加逸時——
+  // 萬一瀏覽器自己卡住、連 callback 都不觸發，也不要無限等下去。
+  const downloadId = await withTimeout(startDownload, 15000, '啟動下載');
 
   // 光拿到 downloadId 只代表瀏覽器「受理」了這次下載請求，不代表真的存進磁碟——
   // 有些瀏覽器（含它們自己的安全機制）會在受理之後才把下載中斷／封鎖掉，那種情況
