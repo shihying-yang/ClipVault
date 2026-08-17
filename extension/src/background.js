@@ -680,7 +680,7 @@ async function writeLocal(p, s) {
   // 不依賴任何 Blob API，所有 Chromium 系 service worker 都保證能用。
   const url = `data:text/markdown;charset=utf-8;base64,${utf8ToBase64(content)}`;
 
-  await new Promise((resolve, reject) => {
+  const downloadId = await new Promise((resolve, reject) => {
     chrome.downloads.download(
       { url, filename: filePath, conflictAction: 'uniquify', saveAs: false },
       (id) => {
@@ -693,7 +693,44 @@ async function writeLocal(p, s) {
     );
   });
 
+  // 光拿到 downloadId 只代表瀏覽器「受理」了這次下載請求，不代表真的存進磁碟——
+  // 有些瀏覽器（含它們自己的安全機制）會在受理之後才把下載中斷／封鎖掉，那種情況
+  // 之前完全沒回報，使用者只會看到「成功」却找不到檔案。這裡改成真的等瀏覽器回報
+  // complete 才算数，interrupted 就把原因帶出來。
+  await waitForDownload(downloadId);
+
   return { fileName, filePath };
+}
+
+function waitForDownload(id, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    let timer;
+    const finish = (ok, msg) => {
+      chrome.downloads.onChanged.removeListener(onChanged);
+      clearTimeout(timer);
+      if (ok) resolve();
+      else reject(new Error(msg));
+    };
+    const onChanged = (delta) => {
+      if (delta.id !== id) return;
+      if (delta.state && delta.state.current === 'complete') finish(true);
+      if (delta.state && delta.state.current === 'interrupted') {
+        finish(false, (delta.error && delta.error.current) || '下載被中斷（可能被瀏覽器的安全機制擋掉）');
+      }
+    };
+    chrome.downloads.onChanged.addListener(onChanged);
+    // 保險：下載可能早在事件監聽器裝上之前就已經有結果了，先查一次目前状態
+    chrome.downloads.search({ id }, (items) => {
+      const item = items && items[0];
+      if (!item) return;
+      if (item.state === 'complete') finish(true);
+      else if (item.state === 'interrupted') finish(false, item.error || '下載被中斷（可能被瀏覽器的安全機制擋掉）');
+    });
+    timer = setTimeout(
+      () => finish(false, '下載逾時（15 秒內瀏覽器沒有回報明確結果，可能被靜點擋掉了）',
+      timeoutMs,
+    );
+  });
 }
 
 // btoa 只吃 Latin1 二進位字串，中文字直接餐進去會炸；先用 TextEncoder
