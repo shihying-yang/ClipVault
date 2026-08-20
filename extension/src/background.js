@@ -142,13 +142,18 @@ function launchAuthFlow(interactive) {
     const clientId = m.oauth2 && m.oauth2.client_id;
     const scopes = ((m.oauth2 && m.oauth2.scopes) || []).join(' ');
     const redirectUri = chrome.identity.getRedirectURL();
+    // 不強迫 prompt=consent——那個參數會逼 Google 每次都重新顯示同意畫面，
+    // 就算之前已經同意過、瀏覽器裡的 Google 帳號根本沒登出也一樣。安靜嘗試
+    // 用 prompt=none（沒登入或需要重新同意就會直接失敗，不會卡住）；真的要
+    // 互動時就不帶 prompt，讓 Google 自己判斷（已同意過就直接跳回，不會
+    // 又跡一次完整的權限同意畫面）。
     const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth'
       + `?client_id=${encodeURIComponent(clientId)}`
       + '&response_type=token'
       + `&redirect_uri=${encodeURIComponent(redirectUri)}`
       + `&scope=${encodeURIComponent(scopes)}`
       + '&include_granted_scopes=true'
-      + `&prompt=${interactive ? 'consent' : 'none'}`;
+      + (interactive ? '' : '&prompt=none');
 
     chrome.identity.launchWebAuthFlow({ url: authUrl, interactive }, (redirectedTo) => {
       if (chrome.runtime.lastError || !redirectedTo) {
@@ -181,7 +186,20 @@ function getToken(interactive) {
   const p = (async () => {
     const cached = await cachedToken();
     if (cached) return cached;
-    const { token, expiresIn } = await launchAuthFlow(interactive);
+
+    // 先安靜試一次（不彈窗）——只要瀏覽器裡的 Google 帳號還是登入狀態、
+    // 且之前同意過這個 App，這一步幾乎都會直接成功，完全不用使用者按任何
+    // 東西。只有真的需要（帳號登出了、第一次授權）才會走到下面互動那段。
+    try {
+      const { token, expiresIn } = await launchAuthFlow(false);
+      await cacheToken(token, expiresIn);
+      return token;
+    } catch (_) { /* 安靜嘗試失敗，如果允許互動就往下走 */ }
+
+    if (!interactive) {
+      throw new Error('尚未連接 Google');
+    }
+    const { token, expiresIn } = await launchAuthFlow(true);
     await cacheToken(token, expiresIn);
     return token;
   })();
