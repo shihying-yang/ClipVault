@@ -132,16 +132,23 @@ Vivaldi、Brave、Comet 這類其他 Chromium 核心瀏覽器都沒有實作這�
 
    ```
    GOOGLE_OAUTH_CLIENT_ID=你的client_id.apps.googleusercontent.com
+   GOOGLE_OAUTH_CLIENT_SECRET=你的client_secret
    ```
+
+   client secret 就在同一個 OAuth 用戶端頁面上，直接複製貼上。Drive 授權
+   走的是 Authorization Code 流程（換 `refresh_token`），access token 過期
+   後完全在背景用 HTTPS 續期，不用再開瀏覽器視窗、也不會有「每天都要重新
+   同意」的狀況——但這個換 token 的步驟，Google 對「網頁應用程式」類型的
+   client 會要求帶 client secret，所以兩個都要填。
 
 6. 重跑 `python3 tools/build_manifest.py`，產生真正的 `extension/manifest.json`
    （這個檔案已被 `.gitignore` 排除，不會進 git 歷史——你的 GCP 專案代號不會
    留在公開 repo 的 commit 裡）。
 
-> client_id 本身仍然不是機密——Google 對「公開型用戶端」的設計本來就沒有
-> client secret，真正的安全邊界是 redirect URI 綁定跟 scope 縮小到
-> `drive.file`。用 `.env` 分開純粹是不想讓你的 GCP 專案代號留在公開 commit
-> 歷史裡，跟安全性無關。
+> client_id、client_secret 本身仍然不是機密——Google 對「公開型用戶端」的
+> client secret 設計本來就假設會被包進發布的程式碼裡，真正的安全邊界是
+> redirect URI 綁定跟 scope 縮小到 `drive.file`。用 `.env` 分開純粹是不想
+> 讓你的 GCP 專案代號留在公開 commit 歷史裡，跟安全性無關。
 
 ## 設定 Google Drive 目的地路徑
 

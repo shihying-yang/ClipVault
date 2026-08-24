@@ -28,6 +28,7 @@ OUTPUT = ROOT / "extension" / "manifest.json"
 ENV_FILE = ROOT / ".env"
 
 PLACEHOLDER = "REPLACE_ME_WITH_YOUR_OWN_CLIENT_ID.apps.googleusercontent.com"
+SECRET_PLACEHOLDER = "REPLACE_ME_WITH_YOUR_OWN_CLIENT_SECRET"
 
 
 def load_env(path):
@@ -67,15 +68,25 @@ def main():
     env.update(load_env(ENV_FILE))
 
     client_id = env.get("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+    client_secret = env.get("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
     if not client_id:
         print(
             "尚未設定 GOOGLE_OAUTH_CLIENT_ID（Google Drive 功能無法使用，"
             "Obsidian 仍可正常運作）。cp .env.example .env 後填入即可。",
             file=sys.stderr,
         )
+    elif not client_secret:
+        print(
+            "尚未設定 GOOGLE_OAUTH_CLIENT_SECRET——Drive 授權改用 Authorization "
+            "Code 流程（換 refresh_token，避免每天都要重新同意），這個流程需要"
+            "同一個 OAuth client 底下的 client secret，去 Google Cloud Console "
+            "那個 OAuth 用戶端的頁面複製貼上即可。",
+            file=sys.stderr,
+        )
 
     manifest_text = TEMPLATE.read_text(encoding="utf-8")
     manifest_text = manifest_text.replace(PLACEHOLDER, client_id or PLACEHOLDER)
+    manifest_text = manifest_text.replace(SECRET_PLACEHOLDER, client_secret or SECRET_PLACEHOLDER)
 
     manifest = json.loads(manifest_text)  # 驗證輸出仍是合法 JSON，壞掉的話寧可不寫檔
     OUTPUT.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

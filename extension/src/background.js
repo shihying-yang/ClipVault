@@ -109,8 +109,20 @@ function errMsg(e) {
   return (e && e.message) || (e && e.constructor && e.constructor.name) || '未知錯誤';
 }
 
-// ── OAuth（launchWebAuthFlow，跨 Chromium 瀏覽器）──────
+// ── OAuth（Authorization Code + refresh_token，跨 Chromium 瀏覽器）──
 // 細節與理由見 README「在 Vivaldi／Brave／Comet 上使用」一節。
+//
+// 之前用 launchWebAuthFlow 的 implicit flow（response_type=token），
+// access token 大約 1 小時就過期，續期靠的是瀏覽器對 accounts.google.com
+// 的登入 cookie（prompt=none 安靜重試）。不同 Chromium 分支（尤其 Comet）
+// 在擴充功能的沙盒環境裡對這份 cookie 的保留方式不一致，導致有時候一天
+// 要重新互動好幾次，而且每次互動都要開一個瀏覽器視窗。
+//
+// 改用 Authorization Code 流程：第一次授權時多要一個 refresh_token，
+// 之後全部續期都走背景的 HTTPS 呼叫（POST 到 Google 的 token endpoint），
+// 完全不用再開瀏覽器視窗、也不依賴瀏覽器的登入狀態。「網頁應用程式」類型
+// 的 client 換 token 這一步 Google 會要求帶 client secret（見 README／
+// .env.example）。
 
 function clientIdSet() {
   const m = chrome.runtime.getManifest();
@@ -118,7 +130,14 @@ function clientIdSet() {
   return !!id && !id.startsWith('REPLACE_ME');
 }
 
+function clientSecret() {
+  const m = chrome.runtime.getManifest();
+  const s = m.clipvault_oauth_client_secret || '';
+  return s && !s.startsWith('REPLACE_ME') ? s : '';
+}
+
 const TOKEN_KEY = 'cvAuthToken';
+const REFRESH_KEY = 'cvRefreshToken';
 
 async function cachedToken() {
   const { [TOKEN_KEY]: t } = await chrome.storage.session.get([TOKEN_KEY]);
@@ -136,44 +155,98 @@ async function clearCachedToken() {
   await chrome.storage.session.remove([TOKEN_KEY]);
 }
 
-function launchAuthFlow(interactive) {
+// refresh_token 存在 storage.local（不是 session）——它本來就是設計成
+// 長期有效、可以跨瀏覽器重開、跨天使用的東西，跟一小時就過期的 access
+// token 性質不一樣。
+async function getRefreshToken() {
+  const { [REFRESH_KEY]: t } = await chrome.storage.local.get([REFRESH_KEY]);
+  return t || null;
+}
+
+async function saveRefreshToken(token) {
+  await chrome.storage.local.set({ [REFRESH_KEY]: token });
+}
+
+async function clearRefreshToken() {
+  await chrome.storage.local.remove([REFRESH_KEY]);
+}
+
+async function tokenEndpoint(params) {
+  const res = await fetchT('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(params).toString(),
+  });
+  if (!res.ok) {
+    const e = new Error(`Google 授權失敗（${res.status}）`);
+    e.status = res.status;
+    throw e;
+  }
+  return res.json();
+}
+
+// 第一次授權：跳出一個瀏覽器視窗讓使用者同意，換回一個一次性的 code，
+// 再用這個 code 跟 Google 換 access_token + refresh_token。
+function launchAuthCodeFlow() {
   return new Promise((resolve, reject) => {
     const m = chrome.runtime.getManifest();
     const clientId = m.oauth2 && m.oauth2.client_id;
+    const secret = clientSecret();
     const scopes = ((m.oauth2 && m.oauth2.scopes) || []).join(' ');
     const redirectUri = chrome.identity.getRedirectURL();
-    // 不強迫 prompt=consent——那個參數會逼 Google 每次都重新顯示同意畫面，
-    // 就算之前已經同意過、瀏覽器裡的 Google 帳號根本沒登出也一樣。安靜嘗試
-    // 用 prompt=none（沒登入或需要重新同意就會直接失敗，不會卡住）；真的要
-    // 互動時就不帶 prompt，讓 Google 自己判斷（已同意過就直接跳回，不會
-    // 又跡一次完整的權限同意畫面）。
     const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth'
       + `?client_id=${encodeURIComponent(clientId)}`
-      + '&response_type=token'
+      + '&response_type=code'
       + `&redirect_uri=${encodeURIComponent(redirectUri)}`
       + `&scope=${encodeURIComponent(scopes)}`
-      + '&include_granted_scopes=true'
-      + (interactive ? '' : '&prompt=none');
+      + '&access_type=offline'
+      + '&prompt=consent'; // 第一次一定要 consent，Google 才會發 refresh_token
 
-    chrome.identity.launchWebAuthFlow({ url: authUrl, interactive }, (redirectedTo) => {
+    chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, async (redirectedTo) => {
       if (chrome.runtime.lastError || !redirectedTo) {
         reject(new Error(
           (chrome.runtime.lastError && chrome.runtime.lastError.message) || '尚未連接 Google'
         ));
         return;
       }
-      const tokenMatch = redirectedTo.match(/[#&]access_token=([^&]+)/);
-      const expMatch = redirectedTo.match(/[#&]expires_in=([^&]+)/);
-      if (!tokenMatch) {
-        reject(new Error('Google 的授權回應裡沒有 access_token'));
-        return;
+      try {
+        const code = new URL(redirectedTo).searchParams.get('code');
+        if (!code) {
+          reject(new Error('Google 的授權回應裡沒有 code'));
+          return;
+        }
+        const body = {
+          code,
+          client_id: clientId,
+          redirect_uri: redirectUri,
+          grant_type: 'authorization_code',
+        };
+        if (secret) body.client_secret = secret;
+        const tok = await tokenEndpoint(body);
+        resolve(tok);
+      } catch (e) {
+        reject(e);
       }
-      resolve({
-        token: decodeURIComponent(tokenMatch[1]),
-        expiresIn: expMatch ? Number(expMatch[1]) : 3600,
-      });
     });
   });
+}
+
+// 安靜續期：純 HTTPS 呼叫，不開任何視窗，也不用管瀏覽器的登入狀態。
+async function refreshAccessToken(refreshToken) {
+  const m = chrome.runtime.getManifest();
+  const clientId = m.oauth2 && m.oauth2.client_id;
+  const secret = clientSecret();
+  const body = { client_id: clientId, refresh_token: refreshToken, grant_type: 'refresh_token' };
+  if (secret) body.client_secret = secret;
+  try {
+    return await tokenEndpoint(body);
+  } catch (e) {
+    // 400/401 通常代表 refresh_token 被使用者自己在 Google 帳號安全性
+    // 頁面撤銷了，或本來就是假的——這種情況才需要清掉重新走一次完整授權；
+    // 其他錯誤（例如網路問題）不該把好好的 refresh_token 清掉。
+    e.refreshInvalid = e.status === 400 || e.status === 401;
+    throw e;
+  }
 }
 
 function getToken(interactive) {
@@ -187,21 +260,29 @@ function getToken(interactive) {
     const cached = await cachedToken();
     if (cached) return cached;
 
-    // 先安靜試一次（不彈窗）——只要瀏覽器裡的 Google 帳號還是登入狀態、
-    // 且之前同意過這個 App，這一步幾乎都會直接成功，完全不用使用者按任何
-    // 東西。只有真的需要（帳號登出了、第一次授權）才會走到下面互動那段。
-    try {
-      const { token, expiresIn } = await launchAuthFlow(false);
-      await cacheToken(token, expiresIn);
-      return token;
-    } catch (_) { /* 安靜嘗試失敗，如果允許互動就往下走 */ }
+    // 有 refresh_token 就先試著用它換一個新的 access_token——這一步完全
+    // 是背景的網路呼叫，不會跳出任何視窗，不管有沒有允許互動都可以做。
+    const refreshToken = await getRefreshToken();
+    if (refreshToken) {
+      try {
+        const tok = await refreshAccessToken(refreshToken);
+        await cacheToken(tok.access_token, tok.expires_in);
+        return tok.access_token;
+      } catch (e) {
+        if (!e.refreshInvalid) throw e;
+        await clearRefreshToken(); // 真的失效了，才清掉重新走完整授權
+      }
+    }
 
     if (!interactive) {
       throw new Error('尚未連接 Google');
     }
-    const { token, expiresIn } = await launchAuthFlow(true);
-    await cacheToken(token, expiresIn);
-    return token;
+
+    // 只有第一次授權、或 refresh_token 真的失效時才會走到這裡（跳視窗）。
+    const tok = await launchAuthCodeFlow();
+    if (tok.refresh_token) await saveRefreshToken(tok.refresh_token);
+    await cacheToken(tok.access_token, tok.expires_in);
+    return tok.access_token;
   })();
   return interactive ? withTimeout(p, 120000, 'Google 授權') : p;
 }
