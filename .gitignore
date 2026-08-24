@@ -1,14 +1,17 @@
-# 打包 .crx 用的私鑰，不進版控（manifest 裡的 key 是公鑰，公開沒問題）
+# 打包 .crx 用的私鑰，不進版控（manifest 裡的 key 是公開金鑰，公開沒問題）
 key.pem
 .DS_Store
 .claude/
 
-# 打包檔不進版控
+# 打包本不進版控
 *.zip
 
-# 本地 OAuth／API 憑證：真正的值只存在這裡，不進 git 歷史
+# 本地 OAuth／API 想節省：真正的值只保存在這裡，不進 git 歷史
 .env
 
-# 由 tools/build_manifest.py 從 manifest.template.json + .env 產生，
+# 由 tools/build_manifest.py 依 manifest.template.json + .env 生成，
 # 每個人本地跑出來的內容不同，不該進版控
 extension/manifest.json
+
+# 同理：含有實際 client secret，由 background.template.js 生成
+extension/src/background.js

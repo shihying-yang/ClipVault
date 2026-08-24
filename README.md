@@ -83,7 +83,8 @@ DOM 錨點），比通用擷取準確很多；其他任何網頁走通用擷取�
 三分鐘，不需要開發環境，也不需要 npm。
 
 1. `git clone` 這個 repo，或用 `Code → Download ZIP` 下載後解壓縮
-2. 完成下面「OAuth 設定」，跑 `python3 tools/build_manifest.py`
+2. 完成下面「OAuth 設定」，跑 `python3 tools/build_manifest.py`（這一步會
+   同時產生 `extension/manifest.json` 與 `extension/src/background.js`）
 3. 到瀏覽器的擴充功能頁面：
    - Chrome：`chrome://extensions`
    - Vivaldi：`vivaldi://extensions`
@@ -140,10 +141,10 @@ Vivaldi、Brave、Comet 這類其他 Chromium 核心瀏覽器都沒有實作這�
    後完全在背景用 HTTPS 續期，不用再開瀏覽器視窗、也不會有「每天都要重新
    同意」的狀況——但這個換 token 的步驟，Google 對「網頁應用程式」類型的
    client 會要求帶 client secret，所以兩個都要填。
-
 6. 重跑 `python3 tools/build_manifest.py`，產生真正的 `extension/manifest.json`
-   （這個檔案已被 `.gitignore` 排除，不會進 git 歷史——你的 GCP 專案代號不會
-   留在公開 repo 的 commit 裡）。
+   與 `extension/src/background.js`（這兩個檔案都已被 `.gitignore` 排除，不會
+   進 git 歷史——你的 GCP 專案代號、client secret 都不會留在公開 repo 的
+   commit 裡）。
 
 > client_id、client_secret 本身仍然不是機密——Google 對「公開型用戶端」的
 > client secret 設計本來就假設會被包進發布的程式碼裡，真正的安全邊界是
@@ -227,7 +228,8 @@ extension/
     ├── naming.js          # 檔名／筆記名規則（沿用 PostSync）
     ├── generic-extract.js # 通用網頁擷取（新增，輕量版）
     ├── content.js         # 浮動按鈕、右鍵選單、toast（整合社群＋通用）
-    ├── background.js      # OAuth、資料夾路徑解析、Drive 寫入、Obsidian 交棒、去重
+    ├── background.template.js # OAuth、資料夾路徑解析、Drive 寫入、Obsidian 交棒、去重（模板，會 commit）
+    ├── background.js      # tools/build_manifest.py 產生，不進 git
     └── toast.css
 tools/
 └── build_manifest.py

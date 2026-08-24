@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
 """
-從 extension/manifest.template.json 讀佔位符版本，套上 .env 裡的
-GOOGLE_OAUTH_CLIENT_ID，輸出成真正的 extension/manifest.json。
+從 extension/manifest.template.json + extension/src/background.template.js
+讀佔位符版本，套上 .env 裡的 GOOGLE_OAUTH_CLIENT_ID／
+GOOGLE_OAUTH_CLIENT_SECRET，輸出成真正的 extension/manifest.json 與
+extension/src/background.js。
 
-extension/manifest.json 本身不進版控（見 .gitignore）——這樣你自己的
-Google Cloud 專案代號就不會出現在 git 歷史裡，即使這個 repo 是公開的。
+extension/manifest.json 、extension/src/background.js 本身都不進版控
+（見 .gitignore）——這樣你自己的 GCP 專案代號與 client secret 就不會出現
+在 git 歷史裡，即使這個 repo 是公開的。
+
+為什麼 client secret 要嵌在 background.js 而不是放在 manifest.json：
+Chrome（尤其 Comet）對 manifest.json 有 schema 驗證，不認得的頂層自訂
+欄位不是單純警告，是真的會被濴掉（"Unrecognized manifest key"），
+導致 chrome.runtime.getManifest() 永遠拿不到它。background.js 是純 JS
+檔案，Chrome 不會對它做 manifest schema 檢查，寫什麼都不會被濴。
 
 用法：
     cp .env.example .env      # 第一次用先建立自己的 .env
-    # 編輯 .env，填入 Google Cloud Console 拿到的 client_id
+    # 編輯 .env，填入 Google Cloud Console 拿到的 client_id 與 client_secret
     python3 tools/build_manifest.py
 
 跑完之後 extension/ 資料夾就是完整可載入的擴充功能，到瀏覽器的
@@ -25,10 +34,12 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TEMPLATE = ROOT / "extension" / "manifest.template.json"
 OUTPUT = ROOT / "extension" / "manifest.json"
+BG_TEMPLATE = ROOT / "extension" / "src" / "background.template.js"
+BG_OUTPUT = ROOT / "extension" / "src" / "background.js"
 ENV_FILE = ROOT / ".env"
 
 PLACEHOLDER = "REPLACE_ME_WITH_YOUR_OWN_CLIENT_ID.apps.googleusercontent.com"
-SECRET_PLACEHOLDER = "REPLACE_ME_WITH_YOUR_OWN_CLIENT_SECRET"
+SECRET_PLACEHOLDER = "OAUTH_CLIENT_SECRET_PLACEHOLDER"
 
 
 def load_env(path):
@@ -56,6 +67,9 @@ def extension_id(manifest):
 def main():
     if not TEMPLATE.exists():
         print(f"找不到 {TEMPLATE}", file=sys.stderr)
+        sys.exit(1)
+    if not BG_TEMPLATE.exists():
+        print(f"找不到 {BG_TEMPLATE}", file=sys.stderr)
         sys.exit(1)
 
     template = json.loads(TEMPLATE.read_text(encoding="utf-8"))
@@ -86,11 +100,14 @@ def main():
 
     manifest_text = TEMPLATE.read_text(encoding="utf-8")
     manifest_text = manifest_text.replace(PLACEHOLDER, client_id or PLACEHOLDER)
-    manifest_text = manifest_text.replace(SECRET_PLACEHOLDER, client_secret or SECRET_PLACEHOLDER)
-
     manifest = json.loads(manifest_text)  # 驗證輸出仍是合法 JSON，壞掉的話寧可不寫檔
     OUTPUT.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"已產生 {OUTPUT}")
+
+    bg_text = BG_TEMPLATE.read_text(encoding="utf-8")
+    bg_text = bg_text.replace(SECRET_PLACEHOLDER, client_secret or SECRET_PLACEHOLDER)
+    BG_OUTPUT.write_text(bg_text, encoding="utf-8")
+    print(f"已產生 {BG_OUTPUT}")
 
 
 if __name__ == "__main__":
