@@ -33,6 +33,18 @@
   <p class="sub">資料夾與標籤只需要設定一次，之後每次收藏都會直接套用。</p>
 
   <fieldset>
+    <legend>收藏功能</legend>
+    <div class="row">
+      <input type="checkbox" id="captureEnabled" checked />
+      <label for="captureEnabled" style="margin:0;">啟用收藏按鈕</label>
+    </div>
+    <p class="hint">
+      關掉之後，頁面上的收藏按鈕（貼文右上角的小按鈕、通用頁面右下角的浮動按鈕）
+      會全部隱藏，右鍵選單與快速鍵也會停用。不用解安裝，臨時不想被看到按鈕時開關這個就好。
+    </p>
+  </fieldset>
+
+  <fieldset>
     <legend>Google Drive</legend>
     <div class="row">
       <input type="checkbox" id="driveEnabled" />
@@ -69,7 +81,7 @@
 
     <label for="obsidianVault">Vault 名稱</label>
     <input type="text" id="obsidianVault" placeholder="例如：我的筆記" />
-    <p class="hint">要跟 Obsidian 裡「開啟資料夾為 Vault」時顯示的名稱完全一樣。</p>
+    <p class="hint">要跟 Obsidian 裡「開啟資料夾為 Vault」畫面上顯示的名稱完全一樣。</p>
 
     <label for="obsidianFolder">資料夾路徑（vault 內的相對路徑，留空就存在根目錄）</label>
     <input type="text" id="obsidianFolder" placeholder="例如：00_inbox/clip-vault" />
@@ -99,7 +111,7 @@
     <input type="text" id="localTags" placeholder="工作, 靈感, 待讀" />
 
     <p class="hint">
-      直接下載成一個 <code>.md</code> 檔案，存到「下載/（上面填的子資料夾）」底下，
+      直接下載成一個 <code>.md</code> 檔案，存到「下載／（上面填的子資料夾）」底下，
       不需要任何帳號、不需要安裝任何 App——適合不想處理 Google 授權或沒裝 Obsidian 的情況。
       跟 Drive／Obsidian 一樣可以獨立開關，三個目的地互不影響、可以同時開。
     </p>

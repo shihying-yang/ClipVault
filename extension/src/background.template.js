@@ -35,16 +35,8 @@ const DRIVE = 'https://www.googleapis.com/drive/v3';
 const DOCS = 'https://docs.googleapis.com/v1';
 const SEEN_CAP = 5000;
 
-// build_manifest.py 會把這行整行替換成你的 client secret（或保持原樣，
-// 代表你還沒設 GOOGLE_OAUTH_CLIENT_SECRET，Drive 功能會顯示尚未設定）。
 const OAUTH_CLIENT_SECRET = 'REPLACE_ME_WITH_YOUR_OWN_CLIENT_SECRET';
 
-// ── 本機 Markdown 下載的檔名強制（見下面 writeLocal / onDeterminingFilename）──
-// chrome.downloads.download() 的 filename 參數，在使用 data: URI 且使用者
-// 開了「下載前問要存哪裡」時，有些 Chromium 分支（尤其 Comet）不會正確採用。
-// 改用 onDeterminingFilename 事件強制指定——這個事件不管該設定開關都會被採用。
-// 用 pendingLocalNames 把「這筆 data: URI 屬於哪個檔名」對應起來，避免與
-// 使用者自己發起的其他下載互相影響。
 const pendingLocalNames = new Map();
 
 chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
@@ -57,10 +49,8 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
       }
     }
   }
-  suggest(); // 不是我們發起的下載，不插手，讓瀏覽器照常處理
+  suggest();
 });
-
-// ── 右鍵選單 ─────────────────────────────────────────
 
 const MENU_ID = 'clipvault-capture';
 
@@ -78,7 +68,7 @@ chrome.runtime.onInstalled.addListener((d) => {
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId !== MENU_ID || !tab) return;
   chrome.tabs.sendMessage(tab.id, { type: 'CLIPVAULT_CONTEXT' }, () => {
-    void chrome.runtime.lastError; // 這個分頁沒有 content script 就算了
+    void chrome.runtime.lastError;
   });
 });
 
@@ -150,9 +140,6 @@ async function fetchT(url, opts = {}, ms = 45000) {
 function errMsg(e) {
   return (e && e.message) || (e && e.constructor && e.constructor.name) || '未知錯誤';
 }
-
-// ── OAuth（Authorization Code + refresh_token，跨 Chromium 瀏覽器）──
-// 細節與理由見 README「在 Vivaldi／Brave／Comet 上使用」一節。
 
 function clientIdSet() {
   const m = chrome.runtime.getManifest();
@@ -450,6 +437,7 @@ async function handleCapture(p, force, tabId) {
       t: Date.now(),
       when: dateTimeStr(),
       docUrl: drive ? drive.docUrl : '',
+      docName: drive ? drive.docName : '',
     });
   }
 
@@ -717,8 +705,6 @@ async function writeObsidian(p, s) {
   return { fileName, filePath };
 }
 
-// ── 本機 Markdown 檔案 ─────────────────
-
 async function writeLocal(p, s) {
   const topic = topicOf(p);
   const fileName = `${docStem(p)}.md`;
@@ -740,17 +726,12 @@ async function writeLocal(p, s) {
     '',
   ].filter((l, i) => !(i === 1 && !l)).join('\n');
 
-  // service worker 裡不是每一個 Chromium 分支都實作了 URL.createObjectURL，
-  // 改用 data: URI——純字串，不依賴任何 Blob API。
-  //
-  // 用 fragment（#token）搜一個一次性標記，讓 onDeterminingFilename 能
-  // 正確對應到這筆下載應該叫什麼名字，不受「詢問存檔位置」設定影響。
-  const token = `cvlocal-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const url = `data:text/markdown;charset=utf-8;base64,${utf8ToBase64(content)}#${token}`;
+  const url = `data:text/markdown;charset=utf-8;base64,${utf8ToBase64(content)}#${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const token = url.split('#')[1];
 
   pendingLocalNames.set(token, filePath);
   const forget = () => pendingLocalNames.delete(token);
-  setTimeout(forget, 30000); // 保險：30 秒後自動清掉，避免卡住的下載一直佔記憶體
+  setTimeout(forget, 30000);
 
   await new Promise((resolve, reject) => {
     chrome.downloads.download(

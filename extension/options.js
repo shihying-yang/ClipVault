@@ -34,10 +34,12 @@ function sendBg(msg) {
 
 async function loadSettings() {
   const s = await chrome.storage.sync.get([
+    'captureEnabled',
     'driveEnabled', 'driveFolderId', 'driveFolderPath', 'driveTags',
     'obsidianEnabled', 'obsidianVault', 'obsidianFolder', 'obsidianTags',
     'localEnabled', 'localFolder', 'localTags',
   ]);
+  $('captureEnabled').checked = s.captureEnabled !== false;
   $('driveEnabled').checked = s.driveEnabled !== false;
   $('driveTags').value = s.driveTags || '';
   $('driveFolderPath').value = s.driveFolderPath || '';
@@ -99,7 +101,7 @@ $('btnResolvePath').addEventListener('click', async () => {
   }
 });
 
-// ── 儲存 ──────────────────────────
+// ── 儲存 ────────────────
 
 $('btnSave').addEventListener('click', async () => {
   const obsidianEnabled = $('obsidianEnabled').checked;
@@ -115,6 +117,7 @@ $('btnSave').addEventListener('click', async () => {
   }
 
   await chrome.storage.sync.set({
+    captureEnabled: $('captureEnabled').checked,
     driveEnabled,
     driveFolderId: resolvedFolderId,
     driveFolderPath: resolvedFolderPath,
