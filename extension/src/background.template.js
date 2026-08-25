@@ -39,6 +39,27 @@ const SEEN_CAP = 5000;
 // 代表你還沒設 GOOGLE_OAUTH_CLIENT_SECRET，Drive 功能會顯示尚未設定）。
 const OAUTH_CLIENT_SECRET = 'REPLACE_ME_WITH_YOUR_OWN_CLIENT_SECRET';
 
+// ── 本機 Markdown 下載的檔名強制（見下面 writeLocal / onDeterminingFilename）──
+// chrome.downloads.download() 的 filename 參數，在使用 data: URI 且使用者
+// 開了「下載前問要存哪裡」時，有些 Chromium 分支（尤其 Comet）不會正確採用。
+// 改用 onDeterminingFilename 事件強制指定——這個事件不管該設定開關都會被採用。
+// 用 pendingLocalNames 把「這筆 data: URI 屬於哪個檔名」對應起來，避免與
+// 使用者自己發起的其他下載互相影響。
+const pendingLocalNames = new Map();
+
+chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
+  if (item.url) {
+    for (const [token, filePath] of pendingLocalNames) {
+      if (item.url.includes(token)) {
+        pendingLocalNames.delete(token);
+        suggest({ filename: filePath, conflictAction: 'uniquify' });
+        return;
+      }
+    }
+  }
+  suggest(); // 不是我們發起的下載，不插手，讓瀏覽器照常處理
+});
+
 // ── 右鍵選單 ─────────────────────────────────────────
 
 const MENU_ID = 'clipvault-capture';
@@ -132,18 +153,6 @@ function errMsg(e) {
 
 // ── OAuth（Authorization Code + refresh_token，跨 Chromium 瀏覽器）──
 // 細節與理由見 README「在 Vivaldi／Brave／Comet 上使用」一節。
-//
-// 之前用 launchWebAuthFlow 的 implicit flow（response_type=token），
-// access token 大約 1 小時就過期，續期靠的是瀏覽器對 accounts.google.com
-// 的登入 cookie（prompt=none 安靜重試）。不同 Chromium 分支（尤其 Comet）
-// 在擴充功能的沙盒環境裡對這份 cookie 的保留方式不一致，導致有時候一天
-// 要重新互動好幾次，而且每次互動都要開一個瀏覽器視窗。
-//
-// 改用 Authorization Code 流程：第一次授權時多要一個 refresh_token，
-// 之後全部續期都走背景的 HTTPS 呼叫（POST 到 Google 的 token endpoint），
-// 完全不用再開瀏覽器視窗、也不依賴瀏覽器的登入狀態。「網頁應用程式」類型
-// 的 client 換 token 這一步 Google 會要求帶 client secret（見 README／
-// .env.example）。
 
 function clientIdSet() {
   const m = chrome.runtime.getManifest();
@@ -176,9 +185,6 @@ async function clearCachedToken() {
   await chrome.storage.session.remove([TOKEN_KEY]);
 }
 
-// refresh_token 存在 storage.local（不是 session）——它本來就是設計成
-// 長期有效、可以跨瀏覽器重開、跨天使用的東西，跟一小時就過期的 access
-// token 性質不一樣。
 async function getRefreshToken() {
   const { [REFRESH_KEY]: t } = await chrome.storage.local.get([REFRESH_KEY]);
   return t || null;
@@ -206,8 +212,6 @@ async function tokenEndpoint(params) {
   return res.json();
 }
 
-// 第一次授權：跳出一個瀏覽器視窗讓使用者同意，換回一個一次性的 code，
-// 再用這個 code 跟 Google 換 access_token + refresh_token。
 function launchAuthCodeFlow() {
   return new Promise((resolve, reject) => {
     const m = chrome.runtime.getManifest();
@@ -221,7 +225,7 @@ function launchAuthCodeFlow() {
       + `&redirect_uri=${encodeURIComponent(redirectUri)}`
       + `&scope=${encodeURIComponent(scopes)}`
       + '&access_type=offline'
-      + '&prompt=consent'; // 第一次一定要 consent，Google 才會發 refresh_token
+      + '&prompt=consent';
 
     chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, async (redirectedTo) => {
       if (chrome.runtime.lastError || !redirectedTo) {
@@ -252,7 +256,6 @@ function launchAuthCodeFlow() {
   });
 }
 
-// 安靜續期：純 HTTPS 呼叫，不開任何視窗，也不用管瀏覽器的登入狀態。
 async function refreshAccessToken(refreshToken) {
   const m = chrome.runtime.getManifest();
   const clientId = m.oauth2 && m.oauth2.client_id;
@@ -262,9 +265,6 @@ async function refreshAccessToken(refreshToken) {
   try {
     return await tokenEndpoint(body);
   } catch (e) {
-    // 400/401 通常代表 refresh_token 被使用者自己在 Google 帳號安全性
-    // 頁面撤銷了，或本來就是假的——這種情況才需要清掉重新走一次完整授權；
-    // 其他錯誤（例如網路問題）不該把好好的 refresh_token 清掉。
     e.refreshInvalid = e.status === 400 || e.status === 401;
     throw e;
   }
@@ -281,8 +281,6 @@ function getToken(interactive) {
     const cached = await cachedToken();
     if (cached) return cached;
 
-    // 有 refresh_token 就先試著用它換一個新的 access_token——這一步完全
-    // 是背景的網路呼叫，不會跳出任何視窗，不管有沒有允許互動都可以做。
     const refreshToken = await getRefreshToken();
     if (refreshToken) {
       try {
@@ -291,7 +289,7 @@ function getToken(interactive) {
         return tok.access_token;
       } catch (e) {
         if (!e.refreshInvalid) throw e;
-        await clearRefreshToken(); // 真的失效了，才清掉重新走完整授權
+        await clearRefreshToken();
       }
     }
 
@@ -299,7 +297,6 @@ function getToken(interactive) {
       throw new Error('尚未連接 Google');
     }
 
-    // 只有第一次授權、或 refresh_token 真的失效時才會走到這裡（跳視窗）。
     const tok = await launchAuthCodeFlow();
     if (tok.refresh_token) await saveRefreshToken(tok.refresh_token);
     await cacheToken(tok.access_token, tok.expires_in);
@@ -342,10 +339,6 @@ async function api(token, method, url, body) {
   return res.status === 204 ? null : res.json();
 }
 
-// ── 去重 ─────────────────────────────────────────────
-// 用 permalink／頁面網址當指紋；社群貼文抓不到 permalink 時退回
-// 「平台＋作者＋內文前 200 字」，跟 PostSync 同一套邏輯。
-
 function hashStr(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
@@ -374,8 +367,6 @@ async function markSeen(key, entry) {
   }
   await chrome.storage.local.set({ cvSeen });
 }
-
-// ── 主流程 ───────────────────────────────────────────
 
 function progress(tabId, text) {
   if (tabId == null) return;
@@ -486,10 +477,6 @@ async function handleCapture(p, force, tabId) {
   return { ok: true, bits, firstUrl: drive ? drive.docUrl : '' };
 }
 
-// ── Google Drive ───────────────────────────────
-// 資料夾是從 resolveFolderPath() 解析出來的（見下方），使用者在設定頁
-// 填路徑、逐層搜尋/自動建立。
-
 async function writeDrive(token, p, s, tabId) {
   progress(tabId, `建立 Doc（${p.text.length.toLocaleString()} 字）…`);
   const doc = await createDoc(token, s.driveFolderId, p, s.driveTags);
@@ -506,7 +493,6 @@ async function writeDrive(token, p, s, tabId) {
   };
 }
 
-// ── 資料夾路徑解析 ─────────────────────────────
 async function findChildFolder(token, parentId, name) {
   const q = `name='${escapeQ(name)}' and mimeType='application/vnd.google-apps.folder'`
     + ` and '${parentId}' in parents and trashed=false`;
@@ -531,7 +517,6 @@ async function createChildFolder(token, parentId, name) {
   return f;
 }
 
-// path 例如 "00 inbox/Clip Vault 收藏"；空字串代表 My Drive 根目錄。
 async function resolveFolderPath(token, path) {
   const segments = String(path || '')
     .split('/')
@@ -678,8 +663,6 @@ async function insertImages(token, docId, folderId, urls, tabId) {
   return failed.length ? `圖 ${done}/${urls.length}` : '';
 }
 
-// ── Obsidian ─────────────────────────────────
-
 const OBSIDIAN_URI_SAFE_LEN = 6000;
 
 async function writeObsidian(p, s) {
@@ -757,13 +740,24 @@ async function writeLocal(p, s) {
     '',
   ].filter((l, i) => !(i === 1 && !l)).join('\n');
 
-  const url = `data:text/markdown;charset=utf-8;base64,${utf8ToBase64(content)}`;
+  // service worker 裡不是每一個 Chromium 分支都實作了 URL.createObjectURL，
+  // 改用 data: URI——純字串，不依賴任何 Blob API。
+  //
+  // 用 fragment（#token）搜一個一次性標記，讓 onDeterminingFilename 能
+  // 正確對應到這筆下載應該叫什麼名字，不受「詢問存檔位置」設定影響。
+  const token = `cvlocal-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const url = `data:text/markdown;charset=utf-8;base64,${utf8ToBase64(content)}#${token}`;
+
+  pendingLocalNames.set(token, filePath);
+  const forget = () => pendingLocalNames.delete(token);
+  setTimeout(forget, 30000); // 保險：30 秒後自動清掉，避免卡住的下載一直佔記憶體
 
   await new Promise((resolve, reject) => {
     chrome.downloads.download(
       { url, filename: filePath, conflictAction: 'uniquify', saveAs: false },
       (id) => {
         if (chrome.runtime.lastError || id == null) {
+          forget();
           reject(new Error((chrome.runtime.lastError && chrome.runtime.lastError.message) || '下載失敗'));
           return;
         }
@@ -781,8 +775,6 @@ function utf8ToBase64(str) {
   for (const b of bytes) binary += String.fromCharCode(b);
   return btoa(binary);
 }
-
-// ── 命名（跟社群貼文共用同一套規則，見 naming.js）────
 
 function topicOf(p) {
   if (self.CLIP_VAULT_NAME && p.platform !== 'web') {
@@ -805,8 +797,6 @@ function sanitizeName(s) {
     .trim()
     .slice(0, 40);
 }
-
-// ── 工具 ─────────────────────────────────────────────
 
 function cleanText(s) {
   return String(s || '')
