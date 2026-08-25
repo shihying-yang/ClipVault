@@ -2,7 +2,7 @@
 // Clip Vault — Background Service Worker v1.0 (template)
 //
 // 這是模板，進版控。實際使用的 extension/src/background.js 由
-// tools/build_manifest.py 從這份模板產生（把 OAUTH_CLIENT_SECRET_PLACEHOLDER
+// tools/build_manifest.py 從這份模板產生（把 OAUTH_CLIENT_SECRET 的預設值
 // 換成你 .env 裡的 GOOGLE_OAUTH_CLIENT_SECRET），不進版控。
 //
 // 為什麼 secret 放在這裡而不是 manifest.json：Chrome（尤其 Comet）對
@@ -10,6 +10,13 @@
 // 會被濴掉（"Unrecognized manifest key"）——把 secret 存成 manifest 自訂
 // 欄位會導致 chrome.runtime.getManifest() 永遠拿不到它。background.js
 // 是純 JS 檔案，Chrome 不會對它做任何 schema 檢查，寫什麼都不會被濴。
+//
+// 注意：OAUTH_CLIENT_SECRET 預設值跟下面 clientSecret() 裡的
+// .startsWith('REPLACE_ME') 故意不是同一個字串（前者是完整的
+// REPLACE_ME_WITH_YOUR_OWN_CLIENT_SECRET，後者只取前段字首）——
+// build_manifest.py 是用完整字串做整份檔案的文字替換，如果這兩處用
+// 同一個完整字串，換完之後判斷式會變成 secret.startsWith(secret 自己)
+// 永遠是 true，導致 clientSecret() 永遠回傳空字串（曾經踩過這個坑）。
 //
 // 收到的內容往兩個目的地寫，各自獨立、互不影響：
 //   Google Drive   使用者自己在設定頁填路徑，背景服務逐層搜尋/建立出來的資料夾
@@ -30,7 +37,7 @@ const SEEN_CAP = 5000;
 
 // build_manifest.py 會把這行整行替換成你的 client secret（或保持原樣，
 // 代表你還沒設 GOOGLE_OAUTH_CLIENT_SECRET，Drive 功能會顯示尚未設定）。
-const OAUTH_CLIENT_SECRET = 'OAUTH_CLIENT_SECRET_PLACEHOLDER';
+const OAUTH_CLIENT_SECRET = 'REPLACE_ME_WITH_YOUR_OWN_CLIENT_SECRET';
 
 // ── 右鍵選單 ─────────────────────────────────────────
 
@@ -145,7 +152,7 @@ function clientIdSet() {
 }
 
 function clientSecret() {
-  return OAUTH_CLIENT_SECRET && !OAUTH_CLIENT_SECRET.startsWith('OAUTH_CLIENT_SECRET_PLACEHOLDER')
+  return OAUTH_CLIENT_SECRET && !OAUTH_CLIENT_SECRET.startsWith('REPLACE_ME')
     ? OAUTH_CLIENT_SECRET
     : '';
 }
@@ -500,24 +507,6 @@ async function writeDrive(token, p, s, tabId) {
 }
 
 // ── 資料夾路徑解析 ─────────────────────────────
-// Google Picker 在 MV3 擴充功能裡跑不起來（見 README「為什麼不是用
-// Google Picker」），改成讓使用者填路徑字串，這裡逐層搜尋、自動建立。
-//
-// 這整段刻意只用 drive.file scope（不擴大成完整 drive）：
-// files.list 底下的查詢在 drive.file scope 一樣能呼叫，只是回傳範圍
-// 被限縮在「這個擴充自己建立過的檔案」——查得到的，一定是它自己建的，
-// 天生就有存取權限，重複使用不會有問題。
-//
-// 唯一的限制：如果路徑裡某一層是使用者手動在 Drive 網頁上建立、
-// 這個擴充從沒碰過的既有資料夾，這裡的搜尋找不到它（不是報錯，是
-// 查得到「沒有」），會被當成不存在而另外新建一個同名的——不是接上
-// 既有那一個。第一次設定路徑時如果填全新路徑就完全不受影響；
-// 之後每次都會正確重複使用同一個。
-
-function escapeQ(s) {
-  return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-}
-
 async function findChildFolder(token, parentId, name) {
   const q = `name='${escapeQ(name)}' and mimeType='application/vnd.google-apps.folder'`
     + ` and '${parentId}' in parents and trashed=false`;
@@ -527,6 +516,10 @@ async function findChildFolder(token, parentId, name) {
   );
   const files = res.files || [];
   return files[0] || null;
+}
+
+function escapeQ(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
 async function createChildFolder(token, parentId, name) {
@@ -539,8 +532,6 @@ async function createChildFolder(token, parentId, name) {
 }
 
 // path 例如 "00 inbox/Clip Vault 收藏"；空字串代表 My Drive 根目錄。
-// 逐層搜尋，找不到就建立，回傳最終那一層的 folderId，以及這次實際
-// 建立了哪幾層（讓設定頁能告訴使用者「這幾層是新建的」，不要含糊帶過）。
 async function resolveFolderPath(token, path) {
   const segments = String(path || '')
     .split('/')
@@ -611,8 +602,6 @@ async function docEnd(token, docId) {
   return last ? last.endIndex - 1 : 1;
 }
 
-// 圖片嵌入沿用 PostSync 驗證過的兩層做法：先讓 Docs API 直接抓網址，
-// 被擋（時效簽章網址、host 被防盃連擋）就自己下載再經 Drive 轉一手。
 async function insertOneImage(token, docId, uri) {
   const at = await docEnd(token, docId);
   await api(token, 'POST', `${DOCS}/documents/${docId}:batchUpdate`, {
@@ -690,14 +679,6 @@ async function insertImages(token, docId, folderId, urls, tabId) {
 }
 
 // ── Obsidian ─────────────────────────────────
-// 走 Obsidian 原生的 obsidian://new URI（不需要 Advanced URI 外掛）。
-// 開一個分頁把 URI 丟給作業系統，讓它交棒給 Obsidian App，
-// 短暫延遲後把那個分頁關掉——它只是個信差，不需要留著。
-//
-// 已知限制：第一次執行瀏覽器會跳出「是否要開啟 Obsidian？」的系統確認框，
-// 這是外部協定處理的正常行為，沒辦法從擴充這邊繞過去；勾選瀏覽器提供的
-// 「一律允許」之後就不會再跳。URI 長度也有上限（隨作業系統/瀏覽器而不同，
-// 大約幾千字元），超長的內容會被截斷並在檔案結尾加註記，不會假裝收完了。
 
 const OBSIDIAN_URI_SAFE_LEN = 6000;
 
@@ -736,18 +717,12 @@ async function writeObsidian(p, s) {
     uri = `obsidian://new?${params.toString()}&content=${encodeURIComponent(content)}`;
   }
 
-  // 記錄目前作用中的分頁，交接完後要把焦點還回去
   let originId = null;
   try {
     const [cur] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
     originId = cur && cur.id;
   } catch (_) { /* 拿不到就算了，不影響主流程 */ }
 
-  // 外部協定（obsidian://）的「是否要開啟外部應用程式」確認框，Chromium
-  // 系瀏覽器只認「目前作用中（active）」的分頁——背景分頁（active:false）
-  // 觸發外部協定常常會被直接靜點忽略，連確認框都不會跳出來，Obsidian
-  // 也就永遠不會被叫起來，但這裡完全不會產生任何錯誤或例外。
-  // 所以這裡短暫搞一下焦點讓協定交接成功，關閉分頁後再把焦點還回去。
   const tab = await chrome.tabs.create({ url: uri, active: true });
   setTimeout(() => {
     chrome.tabs.remove(tab.id, () => void chrome.runtime.lastError);
@@ -760,12 +735,6 @@ async function writeObsidian(p, s) {
 }
 
 // ── 本機 Markdown 檔案 ─────────────────
-// 完全不需要帳號、不需要外部 App——直接用 chrome.downloads 存成一個
-// .md 檔案到瀏覽器「下載」資料夾底下的子資料夾。適合不想處理 Google
-// 授權、或沒有裝 Obsidian 的情況；跟 Drive／Obsidian 一樣可以獨立開關。
-//
-// 內容格式跟 Obsidian 那份一致（標題／標籤／作者時間／原文連結／內文），
-// 圖片一樣不內嵌（只有 Drive 那條路會把圖嵌進 Doc 裡）。
 
 async function writeLocal(p, s) {
   const topic = topicOf(p);
@@ -788,9 +757,6 @@ async function writeLocal(p, s) {
     '',
   ].filter((l, i) => !(i === 1 && !l)).join('\n');
 
-  // service worker 裡不是每一個 Chromium 分支都實作了 URL.createObjectURL
-  // （有些版本直接是 undefined），所以不用 Blob，改用 data: URI——純字串，
-  // 不依賴任何 Blob API，所有 Chromium 系 service worker 都保證能用。
   const url = `data:text/markdown;charset=utf-8;base64,${utf8ToBase64(content)}`;
 
   await new Promise((resolve, reject) => {
@@ -809,8 +775,6 @@ async function writeLocal(p, s) {
   return { fileName, filePath };
 }
 
-// btoa 只吃 Latin1 二進位字串，中文字直接餐進去會炸；先用 TextEncoder
-// 轉成 UTF-8 位元組，再逐位元組轉成 Latin1 字串餐給 btoa。
 function utf8ToBase64(str) {
   const bytes = new TextEncoder().encode(str);
   let binary = '';

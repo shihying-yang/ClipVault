@@ -15,6 +15,13 @@ Chrome（尤其 Comet）對 manifest.json 有 schema 驗證，不認得的頂層
 導致 chrome.runtime.getManifest() 永遠拿不到它。background.js 是純 JS
 檔案，Chrome 不會對它做 manifest schema 檢查，寫什麼都不會被濴。
 
+重要：SECRET_PLACEHOLDER 這個完整字串只會出現在
+ background.template.js 裡「宣告預設值」那一行，不能跟檔案裡其他
+地方用來判斷「有沒有被設定過」的字串完全相同，否則那個判斷式也會被
+這裡的整體字串替換一併換掉，變成 secret.startsWith(secret 自己) 永遠
+是 true。所以 background.template.js 裡的判斷式用的是跟這個完整字串不同
+的短前綴（REPLACE_ME），跟 client_id 那邊的 clientIdSet() 寫法一致。
+
 用法：
     cp .env.example .env      # 第一次用先建立自己的 .env
     # 編輯 .env，填入 Google Cloud Console 拿到的 client_id 與 client_secret
@@ -39,7 +46,7 @@ BG_OUTPUT = ROOT / "extension" / "src" / "background.js"
 ENV_FILE = ROOT / ".env"
 
 PLACEHOLDER = "REPLACE_ME_WITH_YOUR_OWN_CLIENT_ID.apps.googleusercontent.com"
-SECRET_PLACEHOLDER = "OAUTH_CLIENT_SECRET_PLACEHOLDER"
+SECRET_PLACEHOLDER = "REPLACE_ME_WITH_YOUR_OWN_CLIENT_SECRET"
 
 
 def load_env(path):
