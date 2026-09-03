@@ -1,44 +1,30 @@
 # ⚡ Clip Vault — 網頁收藏器
 
 開源的 Chrome 擴充功能（MV3）。任何網頁選取一段文字，或整頁收藏，一鍵存進
-**你自己的 Google Drive** 或 **Obsidian vault**，兩個目的地各自獨立、可以只開
-一邊、也可以兩邊同時開。
+**你自己的 Google Drive**、**Obsidian vault** 或 **本機 Markdown 檔案**，
+三個目的地各自獨立、可以只開一邊、也可以多邊同時開。
 
 在 **Facebook / Threads / X / Instagram / LinkedIn** 上會自動切換成專用的貼文
 擷取邏輯（沿用 [PostSync](https://github.com/Joanna8521/PostSync) 驗證過的
 DOM 錨點），比通用擷取準確很多；其他任何網頁走通用擷取（選取優先，沒選取就
 抓看起來像主文的區塊）。
 
-- **兩個目的地各自獨立**：Drive 路徑、Obsidian vault/資料夾/標籤都在設定頁
-  裡先設好，收藏時直接套用，不用每次選
-- **Google Drive 目的地填路徑就好**：填一個像 `00 inbox/Clip Vault 收藏`
-  的路徑字串，找不到的那一層會自動建立（原因見下面「為什麼不是用 Google
-  Picker」）
-- **Obsidian 免外掛**：走 Obsidian 原生的 `obsidian://new` URI，不需要裝
-  Advanced URI 之類的社群外掛
-- **標籤**：兩邊都會把標籤寫成內容開頭的一行文字（`#工作 #靈感`），不是額外
-  的中繼資料欄位
-- **跨瀏覽器**：從第一天就用 `chrome.identity.launchWebAuthFlow()`，Chrome／
-  Vivaldi／Brave／Comet 都能連 Google（原因見下面「OAuth 設定」一節）
-- **最小權限**：Drive 只用 `drive.file` scope，不需要 Google 審查、也不會
-  出現「未經驗證」的授權提示
+- **三個目的地各自獨立**：
+  - **Google Drive**：一則貼文一份 Doc，圖片完整嵌在文件裡，支援多層資料夾自動建立（如 `00 inbox/Clip Vault 收藏`）。
+  - **Obsidian**：走 Obsidian 原生的 `obsidian://new` URI，完全免裝外掛，**零分頁閃爍靜默喚起**。
+  - **本機 Markdown**：零設定、不需要任何帳號，直接以 `.md` 檔案下載到瀏覽器的下載目錄。
+- **按需智慧顯示（零視覺干擾）**：平時網頁完全不顯示按鈕；預設**按住 `Alt` 鍵（Mac 為 `Option`）且滑鼠指向貼文時**才會優雅浮現「⚡ 收這篇」，不佔據版面。
+- **極限圖片收集**：支援 Instagram 輪播多圖翻頁收圖，以及 **Facebook 相簿貼文（超過 5 張圖的「+N」疊圖）自動翻頁收齊高達 30 張高畫質原圖**。
+- **內建診斷與快取清理工具**：點開 Popup 即可一鍵「🔍 檢查目前分頁」探測當前頁面錨點與圖片判定狀況，或一鍵「🧹 清除去重紀錄」重新收錄。
+- **跨瀏覽器相容**：採用 `chrome.identity.launchWebAuthFlow()`，Chrome／Vivaldi／Brave／Comet 都能正常授權。
+- **最小權限與安全合規**：Drive 僅使用非敏感的 `drive.file` scope，已移除 `scripting` 與全域下載監聽，與 IDM 等下載工具徹底相容。
 
-## 這是「輕量版」
+## 功能特性
 
-社群平台的貼文偵測直接繼承 PostSync 的邏輯（`adapters.js` + `extract.js`），
-那套錨點是經過大量改版試錯才穩定下來的，這裡原封不動沿用。但整體專案本身是
-輕量版：
-
-- 通用網頁擷取是簡化的啟發式（選取優先、沒選取抓主要區塊），不是完整的
-  [Readability](https://github.com/mozilla/readability) 演算法或
-  [obsidian-clipper](https://github.com/obsidianmd/obsidian-clipper) 官方那套
-  可自訂的模板系統
-- 沒有 IG 輪播多圖翻頁收集（只收目前畫面上那張）
-- 沒有像 PostSync 那樣的逐項診斷面板（`偵測到 N 則但一則都沒鎖定` 時只給簡短
-  提示，不列出完整的 DOM 路徑）
-- 沒有測試套件（PostSync/MeshSync 都有 `tests/run.html`，這裡沒有）
-
-夠用就好，社群平台的穩健度才是花錢買回來的部分。
+社群平台的貼文偵測繼承自 PostSync 穩健的錨點架構（`adapters.js` + `extract.js`），並進一步加固：
+- **相簿翻頁收圖**：臉書相簿型貼文遇到「+N」疊圖時，自動暫時打開檢視器用方向鍵收集高畫質原圖，收完自動關閉檢視器並還原捲動位置（可在設定頁隨時開關）。
+- **通用網頁擷取**：輕量啟發式引擎（選取文字優先、沒選取時抓主要文章區塊）。
+- **去重防呆機制**：自動比對貼文網址與去重快取，已收錄內容會提示並可選擇強制重收或一鍵清空快取。
 
 ## 為什麼不是用 Google Picker 選資料夾
 
@@ -178,9 +164,9 @@ Drive 網頁上把這個資料夾搬到別的地方，收藏功能仍然正常�
 - **資料夾路徑**（選填）：vault 內的相對路徑，例如 `00_inbox/clip-vault`。
   留空就存在 vault 根目錄。
 
-收藏時擴充會開一個背景分頁把 `obsidian://new?vault=...&file=...&content=...`
-丟給瀏覽器，觸發作業系統把它交給 Obsidian App，幾秒後那個分頁會自動關掉。
-**這一段完全在本機完成，不需要跑任何伺服器**——跟官方 obsidian-clipper
+收藏時由前端分頁以靜默方式喚起 `obsidian://new?vault=...&file=...&content=...`
+自訂協定，**完全不會開關任何空白分頁（零視覺閃爍）**，直接無縫交棒給本機 Obsidian App
+寫入筆記。**這一段完全在本機完成，不需要跑任何伺服器**——跟官方 obsidian-clipper
 需要另外裝 Local REST API 外掛、跑本機服務的做法不一樣。
 
 ### 已知限制
@@ -188,9 +174,9 @@ Drive 網頁上把這個資料夾搬到別的地方，收藏功能仍然正常�
 - **第一次會跳出系統確認框**：瀏覽器問「是否要開啟 Obsidian？」，這是外部
   協定處理的標準行為，擴充功能這邊沒辦法繞過去；勾選瀏覽器提供的「一律
   允許」之後就不會再問。
-- **本機要有裝 Obsidian 桑面版**，而且該 vault 要用 Obsidian 開過至少一次
+- **本機要有裝 Obsidian 桌面版**，而且該 vault 要用 Obsidian 開過至少一次
   （行動裝置、網頁版 Obsidian 都吃不到 `obsidian://` 協定）。
-- **URI 有長度上限**（隨作業系統/瀏覽器而不同，這裡保守拒 6000 字元）。內容
+- **URI 有長度上限**（隨作業系統/瀏覽器而不同，這裡保守設 6000 字元）。內容
   超長時會自動截斷，並在檔案結尾附上原始連結，不會假裝收完了。
 
 ## 在 Vivaldi／Brave／Comet 上使用
@@ -201,16 +187,15 @@ Obsidian 走的是作業系統層級的 URI 協定，兩者都不依賴任何 Ch
 
 ## 使用方式
 
-**社群平台**（Facebook/Threads/X/Instagram/LinkedIn）：捲到一則貼文，右邊
-會浮出「⚡ 收這篇」，或右鍵選單裡選「⚡ 收藏到 Clip Vault」——指哪篇收哪篇。
+- **社群平台**（Facebook/Threads/X/Instagram/LinkedIn）：
+  - 預設**按住 `Alt` 鍵（Mac 為 `Option`）**，滑鼠移至想收錄的貼文，該貼文右上角便會浮現「⚡ 收這篇」按鈕。
+  - 也可以直接在貼文上按右鍵 →「⚡ 收藏到 Clip Vault」指哪篇收哪篇。
+- **其他任何網頁**：
+  - 選取一段文字 → 按住 `Alt` 按右下角浮動按鈕，或右鍵選單「⚡ 收藏到 Clip Vault」→ 收錄選取內容。
+  - 沒有選取 → 按住 `Alt` 點擊右下角按鈕，收整頁主要文章內容。
+- **自訂顯示時機**：如果習慣常駐顯示按鈕，或想改用 `Ctrl` 鍵，隨時可在設定頁變更「按鈕顯示時機」。
 
-**其他任何網頁**：
-
-- 選取一段文字 → 右鍵「⚡ 收藏到 Clip Vault」或按右下角浮動按鈕 → 收選取
-  的內容
-- 沒有選取 → 收整頁（抓看起來像主文的區塊）
-
-收藏一律是**使用者手動觸發**，沒有任何自動收集，也不會自己捲動頁面。
+收藏一律是**使用者手動觸發**，沒有任何自動背景爬取，也不會擅自捲動頁面。
 
 ## 專案結構
 

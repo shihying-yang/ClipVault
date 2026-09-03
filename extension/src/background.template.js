@@ -770,7 +770,8 @@ function sanitizeName(s) {
 function cleanText(s) {
   return String(s || '')
     .replace(/\r/g, '')
-    .replace(/[ --]/g, '')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();

@@ -211,22 +211,29 @@ Comet 這類其他 Chromium 核心瀏覽器沒有實作這層，用了就只能�
 
 - **貼文偵測**：`refreshPosts()` 叫 `EX.outermost(ad, document)` 拿到目前畫面上所有貼
   文的最外層元素，由 `MutationObserver`（debounce 400ms）+ `scroll`/`resize`/`wheel`
-  事件觸發。`scroll` 監聽故意掃在 `document` 上並加 `capture: true`，因為臉書的
-  動態牧有時是在內層容器量捲動，只聽 `window` 會完全漏接。
-- **每則貼文自帶按鈕**：`ensurePostBtn(post)` / `syncPostButtons()`。用 `WeakMap`
+  事件觸發。`scroll` 監聽故意掛在 `document` 上並加 `capture: true`，因為臉書的
+  動態牆有時是在內層容器量捲動，只聽 `window` 會完全漏接。
+  - **長滾動記憶體保護**：若頁面累積超過 120 篇貼文，依距離視窗中線（`vMid`）由近到遠排序，
+    只保留最近的 120 篇，自動移除遠處貼文的自帶按鈕與 DOM 引用，防止動態牆無限滾動造成記憶體洩漏。
+- **每則貼文自帶按鈕與按需顯示**：`ensurePostBtn(post)` / `syncPostButtons()`。用 `WeakMap`
   （`postButtons`）追蹤哪則貼文已經有按鈕，避免重複建立；已不在畫面上的貼文會把
   對應的按鈕一起移除。
+  - **按需浮現（`triggerKey`）**：預設為 `'alt'`，只有當使用者按住 `Alt`（Mac 為 `Option`）
+    且滑鼠正指向該則貼文（`hoveredPost`）時，按鈕才帶有 `.clipvault-show` 浮現。
+  - **Windows Alt 鍵防劫持**：Windows 平台單按 Alt 會把焦點交給 Chrome 右上角功能表並觸發網頁 `blur`，
+    導致後續 Alt 鍵事件被瀏覽器吞掉；`content.js` 特別在 `ev.key === 'Alt'` 時調用 `ev.preventDefault()`
+    保持網頁焦點。
 - **展開全文**：`expandAll(root)` 按到「查看更多」類的按鈕（`moreButtons()` 找，
-  `ad.more` 錨定比對，不是包含比對），最多循環 3 次。時逸這兩道保險：
-  1. `NS.MENU_DENY` 對標籤進行黑名單比對（避免點到選單、取消追蹤之類的真實後果
-     按鈕）；
+  `ad.more` 錨定比對，不是包含比對），最多循環 3 次。附帶這兩道保險：
+  1. `NS.MENU_DENY` 對標籤進行黑名單比對（避免點到選單、取消追蹤之類的真實後果按鈕）；
   2. `dialogCount()`/`dismissDialog()`：每次點一下就檢查畫面上的 `[role="dialog"]`
-     數量有沒有增加，有就下 Esc 收掉並終止展開。
-- **IG 輪播多圖**：只有当 `ad.next`（翻頁按鈕的 aria-label/文字錨點）存在時才會走
-  `collectCarousel(root)`：先 `hover(root)` 模擬滑鼠移入讓箭頭出現→找 `nextButton()`
-  → `waitImages()` 等圖片載入完 → 重複，直到連續 2 次沒收到新圖（`dry >= 2`）或
-  超過 24 次。
-- **收藏目標**：選取根據 `pickActive()`（跟見畫面中線的貼文，或右鍵/快速鍵時用
+     數量有沒有增加，有就按 Esc 收掉並終止展開。
+- **IG 輪播多圖**：只有當 `ad.next` 存在時走 `collectCarousel(root)`：先 `hover(root)`
+  讓箭頭出現→找 `nextButton()` → `waitImages()` 等圖片載入完 → 重複，直到連續 2 次沒新圖（`dry >= 2`）或超過 24 次。
+- **Facebook 相簿翻頁收圖（`collectAlbum`）**：臉書相簿貼文（超過 5 張圖）帶有「+N」疊圖時，
+  其餘圖片根本不在 DOM 裡。在 `albumEnabled` 開啟且偵測到 `EX.isAlbum(root)` 時，暫時點開檢視器
+  以右方向鍵（`ArrowRight`）逐張收集原圖（上限 30 張），收完自動按 Esc 關閉檢視器並精準還原網址與捲動位置。
+- **收藏目標**：選取根據 `pickActive()`（最接近畫面中線的貼文，或右鍵/快速鍵時用
   最後一次右鍵目標/點擊坐標定位）。
 
 ### 通用頁面（`ad` 不存在）
@@ -240,62 +247,46 @@ Comet 這類其他 Chromium 核心瀏覽器沒有實作這層，用了就只能�
 ### 全局開關（`captureEnabled`）
 
 `enabled` 變數於頁面載入時從 `chrome.storage.sync` 讀一次，並用
-`chrome.storage.onChanged` 追蹤後續變化（設定頁存目前跨分頁即時生效）。關掉時
+`chrome.storage.onChanged` 追蹤後續變化（設定頁存檔即時跨分頁生效）。關掉時
 `hideAllButtons()` 會移除所有 `.clipvault-post-btn`、隱藏浮動按鈕，並在
 `capture()`/`captureGeneric()`/右鍵選單/快速鍵入口都加上檢查，避免既有按鈕的
-遗漏事件監聽器在進行中的收藏。
-
-注意：頁面刚載入到 `chrome.storage.sync.get` 回調回來之前有一個小空窗，如果
-`MutationObserver` 在這段時間內觸發，有可能先建立了幾顆按鈕才被清掉。這是從
-上游 PostSync 繼承過來的孤立風險，沒有實質影響。
+遺留事件監聽器進行中的收藏。
 
 ## 三個收藏目的地的實作細節
 
-三個目的地都在 `background.template.js` 的 `handleCapture()` 裡被並行嘗試（依序：
+三個目的地都在 `background.template.js` 的 `handleCapture()` 裡被嘗試（依序：
 不是並發，是依序 try/catch，但一邊失敗不會影響另兩邊），任何一邊成功就算成功。
 
 ### Google Drive
 
 - `resolveFolderPath(token, path)`：把使用者填的路徑字串（例 `00 inbox/Clip Vault`）
   逐段拆開，每一段用 `findChildFolder()` 搜、找不到就 `createChildFolder()` 建。只用
-  `drive.file` scope，搜尋結果只會包含這個擴充自己建立過的資料夾（README 有詳細解
-  釋為什麼這樣也夠用）。解析結果（`folderId`）存在 `chrome.storage.sync`。
+  `drive.file` scope，搜尋結果只會包含這個擴充自己建立過的資料夾。解析結果（`folderId`）存在 `chrome.storage.sync`。
 - `createDoc()`：建空白 Google Doc，用 Docs API `batchUpdate` 寫入標題（`TITLE` 樣式）、
   標籤行、作者/時間/收錄時間、原文連結（超連結）、正文。
 - `insertImages()`：圖片嵌入有兩層後備——先讓 Docs API 直接抓原始網址
-  （`insertInlineImage`），失敗（時效簽章網址、host 防盃連擋）就改自己下載、上傳到
+  （`insertInlineImage`），失敗（時效簽章網址、host 防盜連擋）就改自己下載、上傳到
   Drive、拿公開分享連結、再嵌入，最後把自己上傳的中間檔刪掉（`viaDrive()`）。兩層
-  都失敗的圖就綁到文末作成連結清單。
+  都失敗的圖就排到文末作成連結清單。
 
 ### Obsidian
 
-完全不需要服務器、不需要 Advanced URI 外掛。`writeObsidian()` 組一個
-`obsidian://new?vault=...&file=...&content=...` 的 URI，用 `chrome.tabs.create()` 開一個
-背景分頁丟給作業系統，1.5 秒後自動關掉。
-
-重要細節：分頁必須用 `active: true` 建立，不能用 `active: false`——Chromium 對
-自訂協定（`obsidian://`）的「是否要開啟外部應用程式？」確認框，只認目前作用中
-的分頁，背景分頁觸發不了這個確認框、也不會有任何錯誤訊息，單純就是永遠不會被
-叫起來。所以這裡會先記下 `originId`，建立新分頁後在 `setTimeout` 裡把焦點還回去。
-
-URI 長度有上限（`OBSIDIAN_URI_SAFE_LEN = 6000`），超過會自動截斷內容並在結尾附上
-原始連結，不會假裝收完了。
+完全不需要伺服器、不需要 Advanced URI 外掛。`writeObsidian()` 組好
+`obsidian://new?vault=...&file=...&content=...` 的 URI 並回傳給呼叫端。
+由前端 content script 透過動態隱藏連結喚醒（`triggerObsidianUri()`）：
+- **零分頁閃爍**：瀏覽器畫面完全不會彈出或關閉任何空白分頁，本機 Obsidian App 零感喚起寫入。
+- 僅在極端無 `tabId` 降級情境下才由背景調用 `chrome.tabs.create`。
+- URI 長度有上限（`OBSIDIAN_URI_SAFE_LEN = 6000`），超過會自動截斷內容並在結尾附上原始連結。
 
 ### 本機 Markdown 檔案
 
 `writeLocal()` 把內容編成 `data:text/markdown;charset=utf-8;base64,...` 的 data URI（**不用
 **`Blob` + `URL.createObjectURL()`，因為不是每個 Chromium 分支的 service worker 都實作了
-後者），中文字先經 `TextEncoder` 轉 UTF-8 位元組、再逐位元組轉 Latin1 字串餐給
+後者），中文字先經 `TextEncoder` 轉 UTF-8 位元組、再逐位元組轉 Latin1 字串交給
 `btoa`（`utf8ToBase64()`）。
 
-檔名強制用 `chrome.downloads.onDeterminingFilename` 事件實作（而不是單純依賴
-`chrome.downloads.download()` 的 `filename` 參數）：有些 Chromium 分支（尤其 Comet）
-在使用者開了「下載前問要存哪裡」時，不會正確採用 `filename` 參數當建議檔名，
-改用自己對 `data:` URI 的預設命名邏輯。`onDeterminingFilename` 則不受這個設定影響，
-一定會被採用。實作方式是在 `data:` URI 的 fragment（`#token`）嵌一個一次性標記，
-存進 `pendingLocalNames` 這個 `Map`，在 `onDeterminingFilename` 監聽器裡比對
-`item.url` 是否包含這個 token 來對應正確檔名。30 秒後自動從 `pendingLocalNames`
-清掉，避免卡住的下載一直佔記憶體。
+- 直接在 `chrome.downloads.download({ url, filename: filePath, conflictAction: 'uniquify' })` 指定相對路徑與檔名。
+- **不再註冊全域 `onDeterminingFilename` 監聽器**：這徹底避免了與第三方下載工具（例如 IDM Integration Module）競爭檔名決定權所產生的 Extension Conflict 錯誤警告。
 
 ## Storage schema 總表
 
@@ -304,6 +295,8 @@ URI 長度有上限（`OBSIDIAN_URI_SAFE_LEN = 6000`），超過會自動截斷�
 | Key | 型別 | 說明 |
 |---|---|---|
 | `captureEnabled` | boolean | 全局收藏開關，預設 `true` |
+| `triggerKey` | string | 按鈕顯示時機：`'alt'`（預設）、`'ctrl'`、`'always'` |
+| `albumEnabled` | boolean | 臉書相簿貼文是否自動逐張翻頁收圖，預設 `true` |
 | `driveEnabled` | boolean | 預設 `true`（`!== false` 判斷） |
 | `driveFolderId` | string | 解析後的 Drive 資料夾 ID（不是路徑字串） |
 | `driveFolderPath` | string | 使用者填的路徑字串（只用來顯示，不影響功能） |
@@ -321,7 +314,7 @@ URI 長度有上限（`OBSIDIAN_URI_SAFE_LEN = 6000`），超過會自動截斷�
 | Key | 型別 | 說明 |
 |---|---|---|
 | `cvRefreshToken` | string | Google OAuth refresh_token |
-| `cvSeen` | object | 去重用，key 是 `fingerprint()` 算出的 hash，值是 `{t, when, docUrl, docName}`，上限 `SEEN_CAP = 5000`筆，超過時根據 `t` 清最舊的 |
+| `cvSeen` | object | 去重用，key 是 `fingerprint()` 算出的 hash，值是 `{t, when, docUrl, docName}`，上限 `SEEN_CAP = 5000` 筆，超過時根據 `t` 清最舊的 |
 | `cvLog` | array | popup 顯示的最近收藏紀錄，上限 50 筆 |
 
 ### `chrome.storage.session`（進程內記憶，重啟 service worker 或瀏覽器就清）
@@ -330,28 +323,15 @@ URI 長度有上限（`OBSIDIAN_URI_SAFE_LEN = 6000`），超過會自動截斷�
 |---|---|---|
 | `cvAuthToken` | object | `{token, expiresAt}`，access_token 快取 |
 
-## 蹩過的坑（以後別再蹩一次）
+## 踩過的坑（以後別再踩一次）
 
-1. **manifest.json 自訂頂層欄位會被濾掉** — 已在上面「OAuth 架構」詳述。結論：
-   任何需要在 runtime 讀到的比較敏感的值，都別放進 `manifest.template.json`，放進
-   `.js` 檔案。
-2. **佔位符自我參照的替換坑** — 已在上面詳述。結論：安放預設值跟判斷式永遠用
-   不同長度的字串。
-3. **MV3 service worker 更新後卡舊版本** — 在擴充功能頁面點「重新整理」有時不會
-   真的重啟 service worker（尤其發生在將 `background.js` 消賠成空字串〃2
-   次内容不一樣的時候）。遇到行為奇怪且確定程式碼本身沒問題時，先把擴充功能
-   完全「移除」後重新「載入未封裝項目」，比單協「重新整理」可靠。確認方法：
-   service worker devtools → Sources → 直接看載入到記憶體裡的程式碼內容，不要
-   只看磁碟上的檔案。
-4. **Chrome extension ID 只跟 `manifest.json` 的 `key` 欄位有關** — 跟你選哪個資料夾
-   「載入未封裝項目」完全無關。如果電腦上有兩份不同版本的 clone，只要 `key` 一樣，
-   隨便選哪一份都會顯示同一個 ID——不能從 ID 一樣就假定載入的是你以為的那份。
-5. **`data:` URI 下載檔名不可靠** — 已在上面「本機 Markdown 檔案」詳述。不要单純
-   依賴 `chrome.downloads.download()` 的 `filename` 參數，用 `onDeterminingFilename`
-   強制指定。
-6. **舊版 background.js 一度真的進了版控** — 手動把路徑加進 `.gitignore` 不代表 git
-   會把已經 commit 過的檔案從版控中移除，需要額外用 `git rm --cached` 或直接在
-   GitHub 上刪檔。
+1. **manifest.json 自訂頂層欄位會被濾掉** — 已在上面「OAuth 架構」詳述。結論：任何需要在 runtime 讀到的比較敏感的值，都別放進 `manifest.template.json`，放進 `.js` 檔案。
+2. **佔位符自我參照的替換坑** — 宣告預設值跟判斷式永遠用不同長度的字串。
+3. **MV3 service worker 更新後卡舊版本** — 在擴充功能頁面點「重新整理」有時不會真的重啟 service worker。遇到行為奇怪且確定程式碼沒問題時，先把擴充功能完全「移除」後重新「載入未封裝項目」。
+4. **Chrome extension ID 只跟 `manifest.json` 的 `key` 欄位有關** — 只要 `key` 一樣，不管在哪個目錄載入都是同一個 ID。
+5. **不要用全域 `onDeterminingFilename` 命名自己的下載** — 全域監聽器會攔截瀏覽器的每一個下載（包含其他外掛或使用者手動下載），若多個擴充（如 IDM）同時呼叫 `suggest()`，Chrome 會跳出 Extension Conflict 衝突錯誤。直接在 `chrome.downloads.download({ filename })` 帶參數即可。
+6. **Windows Chrome 單按 Alt 鍵劫持焦點** — Windows 系統上放開 Alt 鍵會將焦點移至 Chrome 功能表並觸發網頁 `blur`，導致下一次按 Alt 無反應；必須在 keydown/keyup 判定 `ev.key === 'Alt'` 時執行 `ev.preventDefault()`。
+7. **不可見控制字元讓 Git 與 grep 靜音** — 正則表達式中若寫入未跳脫的二進位字面不可見字元（如零寬字元、U+034F、ASCII 控制碼），Git 與 Linux/Mac 工具會把該 JS 檔視為 binary，導致 grep 靜音。必須一律使用 `\x00-\x08` 或 `\u00AD` 十六進位跳脫表示。
 
 ## 常見維護任務
 

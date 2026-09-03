@@ -125,7 +125,19 @@
 
   function refreshPosts() {
     if (!ad || !enabled) return;
-    posts = EX.outermost(ad, document);
+    const all = EX.outermost(ad, document);
+    if (all.length > 120) {
+      // 記憶體保護：在長滾動頁面（如動態牆滑動累積數百篇貼文），只保留離當前視窗最近的 120 篇
+      const vMid = window.scrollY + window.innerHeight / 2;
+      all.sort((a, b) => {
+        const distA = Math.abs(a.getBoundingClientRect().top + window.scrollY - vMid);
+        const distB = Math.abs(b.getBoundingClientRect().top + window.scrollY - vMid);
+        return distA - distB;
+      });
+      posts = all.slice(0, 120);
+    } else {
+      posts = all;
+    }
     syncPostButtons();
   }
 

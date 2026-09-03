@@ -82,10 +82,10 @@
     + ' .clipvault-btn, .clipvault-post-btn, .clipvault-toast, [role="menu"], [role="menuitem"],'
     + ' [role="tablist"], [role="progressbar"], [aria-hidden="true"]';
 
-  const INVISIBLE = /[­͏​-‏⁠-⁤⁪-⁯﻿]/g;
+  const INVISIBLE = /[\u00AD\u034F\u200B-\u200F\u2060-\u2064\u206A-\u206F\uFEFF]/g;
 
   function clean(s) {
-    return String(s).replace(INVISIBLE, '').replace(/ /g, ' ').trim();
+    return String(s).replace(INVISIBLE, '').replace(/\u00A0/g, ' ').trim();
   }
 
   function hiddenChecker() {
