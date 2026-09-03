@@ -16,8 +16,8 @@ extension/manifest.json
 # 同理：含有實際 client secret，由 background.template.js 生成
 extension/src/background.js
 
-#
+# .history 是vscode 裡面的備份，不需要加入git。
 .history
 
-#
+# 我習慣性把old files 加上__，這樣可以保留一個備份。把備份從git中移除才是正確的方式。
 __*__
