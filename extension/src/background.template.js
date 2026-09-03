@@ -528,9 +528,8 @@ async function createDoc(token, folderId, p, tags) {
   const title = `${topic}\n`;
   const tagsPara = tags_ ? `${tags_}\n` : '';
   const meta = `${p.author || p.platformLabel}${p.timeText ? `・${p.timeText}` : ''}・收錄於 ${dateTimeStr()}\n`;
-  const link = p.permalink
-    ? `${p.permalink}\n\n`
-    : `（這則抓不到原文連結，於 ${p.pageUrl || ''} 收錄）\n\n`;
+  const effectiveLink = p.permalink || (p.pageUrl ? p.pageUrl.split('#')[0] : '');
+  const link = effectiveLink ? `${effectiveLink}\n\n` : '';
   const body = `${cleanText(p.text)}\n\n`;
   const text = title + tagsPara + meta + link + body;
   const linkStart = 1 + title.length + tagsPara.length + meta.length;
@@ -545,11 +544,11 @@ async function createDoc(token, folderId, p, tags) {
       },
     },
   ];
-  if (p.permalink) {
+  if (effectiveLink) {
     requests.push({
       updateTextStyle: {
-        range: { startIndex: linkStart, endIndex: linkStart + p.permalink.length },
-        textStyle: { link: { url: p.permalink } },
+        range: { startIndex: linkStart, endIndex: linkStart + effectiveLink.length },
+        textStyle: { link: { url: effectiveLink } },
         fields: 'link',
       },
     });
@@ -773,6 +772,8 @@ function cleanText(s) {
     .replace(/\u00A0/g, ' ')
     .replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '')
     .replace(/(^|\n)⚡?\s*(收這篇|收藏|存進 Clip Vault)\s*($|\n)/gi, '\n')
+    .replace(/(^|\n)Facebook(?=\n|$)/gi, '')
+    .replace(/(^|\n)[a-zA-Z](?=\n|$)/g, '')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();

@@ -132,6 +132,15 @@
 
   const CLIPVAULT_UI_TEXT = /^⚡?\s*(收這篇|收藏|存進 Clip Vault)$/i;
 
+  function isJunkLine(ad, s) {
+    if (!s) return true;
+    if (CLIPVAULT_UI_TEXT.test(s)) return true;
+    if (NS.ACTION_WORDS.test(s)) return true;
+    if (ad && ad.id === 'facebook' && /^facebook$/i.test(s)) return true;
+    if (/^[a-zA-Z]$/.test(s)) return true;
+    return false;
+  }
+
   function postText(ad, root) {
     let lines = [];
     if (ad.text) {
@@ -141,14 +150,14 @@
     }
     if (lines.join('').trim().length < 8) lines = readable(ad, root, root);
 
-    lines = lines.filter((s) => !CLIPVAULT_UI_TEXT.test(s));
+    lines = lines.filter((s) => !isJunkLine(ad, s));
     let text = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
     if (text.length < 15) {
       text = (root.innerText || '')
         .split('\n')
         .map((s) => s.trim())
-        .filter((s) => s && !NS.ACTION_WORDS.test(s) && !CLIPVAULT_UI_TEXT.test(s))
+        .filter((s) => s && !isJunkLine(ad, s))
         .join('\n')
         .trim();
     }
@@ -180,6 +189,7 @@
     for (const raw of parts) {
       const v = raw.replace(NAME_NOISE, '').replace(/\s+/g, ' ').trim();
       if (!v) continue;
+      if (v.toLowerCase() === 'facebook') continue;
       if (TIME_LIKE.test(v)) continue;
       if (v.length > 40) continue;
       return v.slice(0, 60);
@@ -187,7 +197,38 @@
     return '';
   }
 
-  const JUNK_PARAMS = ['__tn__', 'ref', 'refid', 'comment_id', 'fbclid', 'rdid', 's', 't', 'igsh', 'img_index'];
+  const JUNK_PARAMS = ['__tn__', 'ref', 'refid', 'comment_id', 'fbclid', 'rdid', 's', 't', 'igsh', 'img_index', 'mibextid'];
+
+  function isStandalonePost(ad, rawUrl) {
+    try {
+      const u = new URL(rawUrl);
+      const path = u.pathname || '';
+      const search = u.search || '';
+      if (ad.id === 'facebook') {
+        return /(\/posts\/|\/permalink\/|\/share\/[pv]\/|\/photos?\/|\/reel\/)/i.test(path)
+          || (path.includes('story.php') && search.includes('story_fbid='));
+      }
+      if (ad.id === 'x') return /\/status\/\d+/i.test(path);
+      if (ad.id === 'threads') return /\/post\/[A-Za-z0-9_-]+/i.test(path);
+      if (ad.id === 'instagram') return /\/(p|reel)\/[A-Za-z0-9_-]+/i.test(path);
+      if (ad.id === 'linkedin') return /(\/feed\/update\/|\/posts\/)/i.test(path);
+    } catch (_) {}
+    return false;
+  }
+
+  function cleanPostUrl(rawUrl, base) {
+    try {
+      const u = new URL(rawUrl, base || location.origin);
+      JUNK_PARAMS.forEach((k) => u.searchParams.delete(k));
+      [...u.searchParams.keys()]
+        .filter((k) => k.startsWith('__cft__') || k.startsWith('mibextid') || k.startsWith('rdid'))
+        .forEach((k) => u.searchParams.delete(k));
+      u.hash = '';
+      return u.toString();
+    } catch (_) {
+      return '';
+    }
+  }
 
   function permalink(ad, root, origin) {
     if (!ad.permalink) return ad.id === 'linkedin' ? NS.linkedinPermalink(root) : '';
@@ -195,16 +236,20 @@
       if (!ownedBy(ad, a, root)) continue;
       const href = a.getAttribute('href') || '';
       if (!href || href.startsWith('#')) continue;
-      try {
-        const u = new URL(href, origin || location.origin);
-        JUNK_PARAMS.forEach((k) => u.searchParams.delete(k));
-        [...u.searchParams.keys()]
-          .filter((k) => k.startsWith('__cft__'))
-          .forEach((k) => u.searchParams.delete(k));
-        return u.toString();
-      } catch (_) { /* 組不起來就換下一個 */ }
+      const cleaned = cleanPostUrl(href, origin);
+      if (cleaned) return cleaned;
     }
     if (ad.id === 'linkedin') return NS.linkedinPermalink(root);
+
+    // 後備：若貼文內部找不到連向自身的超連結，但當前分頁網址本身就是貼文獨立網址
+    try {
+      const cur = origin || location.href;
+      if (isStandalonePost(ad, cur)) {
+        const cleaned = cleanPostUrl(cur);
+        if (cleaned) return cleaned;
+      }
+    } catch (_) {}
+
     return '';
   }
 
