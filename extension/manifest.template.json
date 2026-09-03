@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Clip Vault — 網頁收藏器",
-  "version": "1.0.0",
-  "description": "任何網頁選取文字或整頁，一鍵存進你自己的 Google Drive 或 Obsidian vault。社群平台（Facebook/Threads/X/Instagram/LinkedIn）走專用擷取，其他網頁走通用擷取。",
+  "version": "1.2.0",
+  "description": "任何網頁選取文字或整頁，一鍵存進你自己的 Google Drive、Obsidian vault 或本機 Markdown 檔案。社群平台（Facebook/Threads/X/Instagram/LinkedIn）走專用擷取，其他網頁走通用擷取。",
   "permissions": [
     "storage",
     "identity",
