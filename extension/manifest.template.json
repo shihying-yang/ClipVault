@@ -8,7 +8,6 @@
     "identity",
     "contextMenus",
     "activeTab",
-    "scripting",
     "downloads"
   ],
   "host_permissions": [

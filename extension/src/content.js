@@ -606,6 +606,22 @@
     });
   }
 
+  function triggerObsidianUri(uri) {
+    if (!uri) return;
+    try {
+      const a = document.createElement('a');
+      a.href = uri;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        try { a.remove(); } catch (_) {}
+      }, 500);
+    } catch (e) {
+      console.warn('[ClipVault] 無法喚起 Obsidian URI:', e);
+    }
+  }
+
   function send(data, force) {
     return new Promise((resolve) => {
       toast(`⏳ 準備寫入…（${data.text.length.toLocaleString()} 字・${data.images.length} 張圖）`, null, 0, true);
@@ -615,6 +631,9 @@
           return resolve();
         }
         if (res && res.ok) {
+          if (res.obsidianUri) {
+            triggerObsidianUri(res.obsidianUri);
+          }
           toast(`✅ 已收錄\n${(res.bits || []).join('\n')}`, res.firstUrl, 6000);
         } else {
           toast(`❌ 寫入失敗：${(res && res.error) || '未知錯誤'}`, null, 10000);

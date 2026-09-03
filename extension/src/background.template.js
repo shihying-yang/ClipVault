@@ -37,21 +37,6 @@ const SEEN_CAP = 5000;
 
 const OAUTH_CLIENT_SECRET = 'REPLACE_ME_WITH_YOUR_OWN_CLIENT_SECRET';
 
-const pendingLocalNames = new Map();
-
-chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
-  if (item.url) {
-    for (const [token, filePath] of pendingLocalNames) {
-      if (item.url.includes(token)) {
-        pendingLocalNames.delete(token);
-        suggest({ filename: filePath, conflictAction: 'uniquify' });
-        return;
-      }
-    }
-  }
-  suggest();
-});
-
 const MENU_ID = 'clipvault-capture';
 
 chrome.runtime.onInstalled.addListener((d) => {
@@ -414,7 +399,7 @@ async function handleCapture(p, force, tabId) {
   if (wantObsidian) {
     try {
       progress(tabId, '交給 Obsidian…');
-      obs = await writeObsidian(p, s);
+      obs = await writeObsidian(p, s, tabId);
     } catch (e) {
       obsError = errMsg(e);
     }
@@ -462,7 +447,12 @@ async function handleCapture(p, force, tabId) {
   badge(ok);
 
   if (!ok) return { ok: false, error: bits.join('・') };
-  return { ok: true, bits, firstUrl: drive ? drive.docUrl : '' };
+  return {
+    ok: true,
+    bits,
+    firstUrl: drive ? drive.docUrl : '',
+    obsidianUri: obs && obs.uri ? obs.uri : '',
+  };
 }
 
 async function writeDrive(token, p, s, tabId) {
@@ -653,7 +643,7 @@ async function insertImages(token, docId, folderId, urls, tabId) {
 
 const OBSIDIAN_URI_SAFE_LEN = 6000;
 
-async function writeObsidian(p, s) {
+async function writeObsidian(p, s, tabId) {
   const topic = topicOf(p);
   const fileName = docStem(p);
   const folder = String(s.obsidianFolder || '').replace(/^\/+|\/+$/g, '');
@@ -688,21 +678,25 @@ async function writeObsidian(p, s) {
     uri = `obsidian://new?${params.toString()}&content=${encodeURIComponent(content)}`;
   }
 
-  let originId = null;
-  try {
-    const [cur] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    originId = cur && cur.id;
-  } catch (_) { /* 拿不到就算了，不影響主流程 */ }
+  // 若由分頁發起，交由前端 content script 靜默喚醒（避免開關空白分頁造成視覺閃爍）。
+  // 僅在無 tabId 的降級情境下才用 chrome.tabs.create。
+  if (!tabId) {
+    let originId = null;
+    try {
+      const [cur] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      originId = cur && cur.id;
+    } catch (_) { /* 拿不到就算了，不影響主流程 */ }
 
-  const tab = await chrome.tabs.create({ url: uri, active: true });
-  setTimeout(() => {
-    chrome.tabs.remove(tab.id, () => void chrome.runtime.lastError);
-    if (originId != null) {
-      chrome.tabs.update(originId, { active: true }, () => void chrome.runtime.lastError);
-    }
-  }, 1500);
+    const tab = await chrome.tabs.create({ url: uri, active: true });
+    setTimeout(() => {
+      chrome.tabs.remove(tab.id, () => void chrome.runtime.lastError);
+      if (originId != null) {
+        chrome.tabs.update(originId, { active: true }, () => void chrome.runtime.lastError);
+      }
+    }, 1500);
+  }
 
-  return { fileName, filePath };
+  return { fileName, filePath, uri };
 }
 
 async function writeLocal(p, s) {
@@ -726,19 +720,13 @@ async function writeLocal(p, s) {
     '',
   ].filter((l, i) => !(i === 1 && !l)).join('\n');
 
-  const url = `data:text/markdown;charset=utf-8;base64,${utf8ToBase64(content)}#${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const token = url.split('#')[1];
-
-  pendingLocalNames.set(token, filePath);
-  const forget = () => pendingLocalNames.delete(token);
-  setTimeout(forget, 30000);
+  const url = `data:text/markdown;charset=utf-8;base64,${utf8ToBase64(content)}`;
 
   await new Promise((resolve, reject) => {
     chrome.downloads.download(
       { url, filename: filePath, conflictAction: 'uniquify', saveAs: false },
       (id) => {
         if (chrome.runtime.lastError || id == null) {
-          forget();
           reject(new Error((chrome.runtime.lastError && chrome.runtime.lastError.message) || '下載失敗'));
           return;
         }
