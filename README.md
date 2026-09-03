@@ -42,7 +42,49 @@ Clip Vault 是一款開源、隱私至上的 Chrome / Chromium 瀏覽器擴充�
 * **想同步到 Obsidian**：
   * 勾選「啟用 Obsidian」，輸入你的 Vault 名稱（例如 `我的筆記庫`），收錄時零分頁閃爍直接寫入。
 * **想存到 Google Drive**：
-  * 點擊「連接 Google」完成授權，填入你想存放的路徑（例如 `00 inbox/貼文收藏`）並點擊「確認／建立路徑」。
+  * 需要建立免費的 Google API 金鑰（只需設定一次，請見下方 [Google Drive 首次連接設定](#-google-drive-首次連接設定)），按「連接 Google」完成授權並填入存放路徑即可。
+
+---
+
+## 🔑 Google Drive 首次連接設定
+
+> **提示**：如果您只使用「本機 Markdown」或「Obsidian」，**可以完全跳過此步驟**！只有需要存入 Google Drive 時才需設定。
+
+因為 Clip Vault 採用 100% 無伺服器架構（資料直接由您的瀏覽器存入您的 Google Drive，不經由任何第三方伺服器），因此需要使用您自己的 Google Cloud 免費 API 金鑰：
+
+1. **建立 Google 專案**：前往 [Google Cloud Console](https://console.cloud.google.com/)，點擊建立新專案，並在「API 和服務」中啟用 **Google Drive API** 與 **Google Docs API**。
+2. **設定同意畫面**：
+   - 前往「OAuth 同意畫面」→ 使用者類型選擇「外部」。
+   - 填寫應用程式名稱（如 `Clip Vault`）與聯絡信箱。
+   - 在 Scope 權限加入 `.../auth/drive.file`（此為非敏感權限，不需要 Google 審查，亦無使用者人數限制）。
+   - 將發布狀態切換為「正式版」。
+3. **取得重新導向網址 (Redirect URI)**：
+   - 在終端機執行一次建置腳本：
+     ```bash
+     python tools/build_manifest.py
+     ```
+   - 終端機將會印出專屬的 Redirect URI，例如：
+     `https://hiekfmjdkkghmkomeahhhghdigbmchcf.chromiumapp.org/`
+4. **建立憑證**：
+   - 前往「憑證」→「建立憑證」→ 選擇 **「OAuth 用戶端 ID」**。
+   - 應用程式類型選擇 **「網頁應用程式」**。
+   - 在「已授權的重新導向 URI」貼上步驟 3 印出的那串網址。
+5. **填入設定檔**：
+   - 複製專案目錄下的 `.env.example` 並命名為 `.env`：
+     ```bash
+     cp .env.example .env
+     ```
+   - 打開 `.env` 填入剛才拿到的 Client ID 與 Client Secret：
+     ```env
+     GOOGLE_OAUTH_CLIENT_ID=你的Client_ID.apps.googleusercontent.com
+     GOOGLE_OAUTH_CLIENT_SECRET=你的Client_Secret
+     ```
+6. **產生擴充功能檔案**：
+   - 重新執行一次建置指令：
+     ```bash
+     python tools/build_manifest.py
+     ```
+   - 回到瀏覽器點擊擴充功能圖示進入「⚙️ 開啟設定」，點擊「連接 Google」，即可一鍵登入授權並設定存放路徑！
 
 ---
 
