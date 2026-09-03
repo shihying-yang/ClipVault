@@ -269,6 +269,20 @@ Comet 這類其他 Chromium 核心瀏覽器沒有實作這層，用了就只能�
   Drive、拿公開分享連結、再嵌入，最後把自己上傳的中間檔刪掉（`viaDrive()`）。兩層
   都失敗的圖就排到文末作成連結清單。
 
+#### 架構決策：為什麼不是用 Google Picker 選資料夾？
+原本的設計是想用 Google 官方的 Picker 元件，讓使用者直接視覺化挑選現有的 Drive 資料夾。然而在 Manifest V3 擴充功能中這會撞上 Chromium 至今未解的底層限制：
+1. **CSP 封鎖遠端腳本**：一般擴充頁面（`options.html`）的 Content Security Policy 完全禁止載入任何遠端腳本，而 Picker 必須從 `https://apis.google.com` 載入外部 JS，直接引入會導致整個擴充被拒絕載入。
+2. **沙盒頁面被 CORS 阻擋**：改用 MV3 沙盒頁面（Sandbox Page）繞過 CSP 後，沙盒頁面屬於不透明來源（`null` origin），但 **Google Picker 的後端伺服器在 CORS 政策中直接封鎖所有來自 `null` 來源的請求**。Chromium 官方討論串中 Google 工程師給出的解法也是「另外自行架設一個有實體網域的伺服器跑 Picker」。
+3. **字串解析＋最小權限原則**：為了讓使用者不必額外架設伺服器，本專案改走「填入文字路徑（如 `00 inbox/Clip Vault`）由背景自動搜尋與建立」。此作法在 `drive.file` scope 下完全合規——`files.list` 雖然只能搜尋擴充自身建立的資料夾，但只要第一次建立成功後，後續即可完美重複使用相同資料夾 ID，既免去架站成本，又維持了嚴格的最小權限原則。
+
+#### 架構決策：為什麼不用 `chrome.identity.getAuthToken()`？
+- `chrome.identity.getAuthToken()` 是 Chrome 專屬的私有 API，依賴 Chrome 內建對 Google 帳號的私有橋接服務。在 Vivaldi、Brave、Comet 等第三方 Chromium 分支中均未實作此服務，使用它會導致跨瀏覽器相容性全滅。
+- 本專案改採標準的 `chrome.identity.launchWebAuthFlow()`，配合 OAuth 2.0「網頁應用程式」類型，並實作 Authorization Code 交換 `refresh_token`。token 過期後在背景無感刷新，一次授權即可長久運作。
+
+#### 客戶端 Client Secret 的安全邊界
+- 在 Chrome Extension 等客戶端環境中，Client Secret 屬於公開型用戶端憑證，無法對使用者本機真正保密。Google 對此類憑證的安全邊界設計重點在於：**嚴格綁定 OAuth Redirect URI（`https://<extension-id>.chromiumapp.org/`）** 以及 **權限嚴格限制在 `drive.file` scope**。
+- 本專案採用 `tools/build_manifest.py` 從本地 `.env` 動態注入 secret，純粹是為了確保使用者的個人 GCP 憑證不會意外提交至公開的 Git Commit 歷史中。
+
 ### Obsidian
 
 完全不需要伺服器、不需要 Advanced URI 外掛。`writeObsidian()` 組好
