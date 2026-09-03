@@ -35,13 +35,24 @@
   let posts = [];
   let active = null;
   let enabled = true;
+  let triggerKey = 'alt'; // 'alt' | 'ctrl' | 'always'
+  let isModifierActive = false;
+  let hoveredPost = null;
+  let lastMouseX = -1;
+  let lastMouseY = -1;
 
-  chrome.storage.sync.get(['captureEnabled'], (r) => {
+  chrome.storage.sync.get(['captureEnabled', 'triggerKey'], (r) => {
     enabled = r.captureEnabled !== false;
+    triggerKey = r.triggerKey || 'alt';
     if (!enabled) hideAllButtons();
+    else updateVisibility();
   });
   chrome.storage.onChanged.addListener((ch, area) => {
     if (area !== 'sync') return;
+    if (ch.triggerKey) {
+      triggerKey = ch.triggerKey.newValue || 'alt';
+      updateVisibility();
+    }
     if (ch.captureEnabled) {
       enabled = ch.captureEnabled.newValue !== false;
       if (!enabled) {
@@ -49,15 +60,62 @@
       } else if (ad) {
         refreshPosts();
         schedule();
+        updateVisibility();
       } else {
         position();
+        updateVisibility();
       }
     }
   });
 
   function hideAllButtons() {
     for (const b of document.querySelectorAll('.clipvault-post-btn')) b.remove();
-    if (btn) btn.style.display = 'none';
+    if (btn) {
+      btn.classList.remove('clipvault-show');
+      btn.style.display = 'none';
+    }
+  }
+
+  function findPostFromElement(target) {
+    if (!target || !ad) return null;
+    if (target.classList && target.classList.contains('clipvault-post-btn')) {
+      return target.parentElement;
+    }
+    for (const p of posts) {
+      if (p === target || p.contains(target)) return p;
+    }
+    const found = EX && EX.outermostOf ? EX.outermostOf(ad, target) : null;
+    if (found && posts.includes(found)) return found;
+    return found || null;
+  }
+
+  function updateVisibility() {
+    if (!enabled) {
+      if (btn) btn.classList.remove('clipvault-show');
+      for (const b of document.querySelectorAll('.clipvault-post-btn.clipvault-show')) {
+        b.classList.remove('clipvault-show');
+      }
+      return;
+    }
+
+    if (!ad) {
+      // 通用頁面浮動按鈕
+      if (btn) {
+        const show = triggerKey === 'always' || isModifierActive;
+        if (show) btn.classList.add('clipvault-show');
+        else btn.classList.remove('clipvault-show');
+      }
+    } else {
+      // 社群頁面貼文按鈕：滑鼠當前指著該貼文且按住鍵（或設為 always）時才顯示
+      for (const post of posts) {
+        const b = postButtons.get(post);
+        if (!b) continue;
+        const show = (triggerKey === 'always' && post === hoveredPost)
+          || (isModifierActive && post === hoveredPost);
+        if (show) b.classList.add('clipvault-show');
+        else b.classList.remove('clipvault-show');
+      }
+    }
   }
 
   function refreshPosts() {
@@ -100,6 +158,7 @@
       const owner = b.parentElement;
       if (!owner || !live.has(owner)) b.remove();
     }
+    updateVisibility();
   }
 
   function rejectReason(r) {
@@ -168,6 +227,7 @@
     b.style.top = '';
     b.style.right = '18px';
     b.style.bottom = '18px';
+    updateVisibility();
   }
 
   let ticking = false;
@@ -202,6 +262,127 @@
   } else {
     setTimeout(position, 300);
   }
+
+  // ── Modifier 鍵與滑鼠懸停事件監聽 ──────────
+  function isTypingTarget(target) {
+    if (!target) return false;
+    const tag = target.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable;
+  }
+
+  function getCurrentHoveredPost() {
+    if (!ad) return null;
+    if (lastMouseX >= 0 && lastMouseY >= 0) {
+      const el = document.elementFromPoint(lastMouseX, lastMouseY);
+      const p = findPostFromElement(el);
+      if (p) return p;
+    }
+    try {
+      const hovered = document.querySelectorAll(':hover');
+      if (hovered.length) {
+        for (let i = hovered.length - 1; i >= 0; i--) {
+          const p = findPostFromElement(hovered[i]);
+          if (p) return p;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  window.addEventListener('keydown', (ev) => {
+    if (triggerKey === 'always' || !enabled) return;
+    if (isTypingTarget(ev.target) && triggerKey === 'ctrl') return;
+
+    let match = false;
+    if (triggerKey === 'alt') match = ev.altKey || ev.key === 'Alt';
+    else if (triggerKey === 'ctrl') match = ev.ctrlKey || ev.key === 'Control';
+
+    if (match) {
+      // 在 Windows 上單獨按 Alt 鍵會啟動瀏覽器選單並導致網頁失焦（blur）。
+      // 阻止單鍵預設行為可防止焦點被搶走，確保後續再次按 Alt 依然能連續觸發。
+      if (ev.key === 'Alt' || (triggerKey === 'ctrl' && ev.key === 'Control')) {
+        ev.preventDefault();
+      }
+
+      if (!isModifierActive) {
+        isModifierActive = true;
+        if (ad) {
+          hoveredPost = getCurrentHoveredPost();
+        }
+        updateVisibility();
+      }
+    }
+  }, true);
+
+  window.addEventListener('keyup', (ev) => {
+    if (triggerKey === 'always' || !enabled) return;
+
+    let released = false;
+    if (triggerKey === 'alt') released = ev.key === 'Alt' || !ev.altKey;
+    else if (triggerKey === 'ctrl') released = ev.key === 'Control' || !ev.ctrlKey;
+
+    if (released) {
+      if (ev.key === 'Alt' || (triggerKey === 'ctrl' && ev.key === 'Control')) {
+        ev.preventDefault();
+      }
+      if (isModifierActive) {
+        isModifierActive = false;
+        updateVisibility();
+      }
+    }
+  }, true);
+
+  window.addEventListener('blur', () => {
+    if (isModifierActive) {
+      isModifierActive = false;
+      updateVisibility();
+    }
+  });
+
+  window.addEventListener('focus', () => {
+    if (isModifierActive) {
+      isModifierActive = false;
+      updateVisibility();
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && isModifierActive) {
+      isModifierActive = false;
+      updateVisibility();
+    }
+  });
+
+  document.addEventListener('mousemove', (ev) => {
+    lastMouseX = ev.clientX;
+    lastMouseY = ev.clientY;
+
+    if (triggerKey !== 'always' && enabled) {
+      const modDown = triggerKey === 'alt' ? ev.altKey : (triggerKey === 'ctrl' ? ev.ctrlKey : false);
+      if (isModifierActive !== modDown) {
+        isModifierActive = modDown;
+        updateVisibility();
+      }
+    }
+
+    if (!ad) return;
+    const post = findPostFromElement(ev.target);
+    if (post !== hoveredPost) {
+      hoveredPost = post;
+      if (isModifierActive || triggerKey === 'always') {
+        updateVisibility();
+      }
+    }
+  }, { passive: true });
+
+  document.addEventListener('mouseleave', () => {
+    if (hoveredPost) {
+      hoveredPost = null;
+      if (isModifierActive || triggerKey === 'always') {
+        updateVisibility();
+      }
+    }
+  });
 
   function labelOf(el) {
     return `${el.getAttribute('aria-label') || ''} ${(el.textContent || '')}`

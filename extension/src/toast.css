@@ -23,11 +23,19 @@
   white-space: nowrap;
   cursor: pointer !important;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
-  opacity: 0.92;
-  transition: opacity 0.12s, transform 0.12s;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
-.clipvault-btn:hover { opacity: 1; transform: translateY(-1px); }
+.clipvault-btn.clipvault-show {
+  opacity: 0.92;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.clipvault-btn.clipvault-show:hover { opacity: 1; transform: translateY(-1px); }
 .clipvault-btn:disabled { opacity: 0.5; cursor: default !important; transform: none; }
 
 .clipvault-active {
@@ -55,11 +63,19 @@
   white-space: nowrap;
   cursor: pointer !important;
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
-  opacity: 0.85;
-  transition: opacity 0.12s, transform 0.12s;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
-.clipvault-post-btn:hover { opacity: 1 !important; transform: translateY(-1px); }
+.clipvault-post-btn.clipvault-show {
+  opacity: 0.85;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.clipvault-post-btn.clipvault-show:hover { opacity: 1 !important; transform: translateY(-1px); }
 .clipvault-post-btn:disabled { opacity: 0.45 !important; cursor: default !important; transform: none; }
 
 .clipvault-toast {

@@ -15,3 +15,9 @@ extension/manifest.json
 
 # 同理：含有實際 client secret，由 background.template.js 生成
 extension/src/background.js
+
+#
+.history
+
+#
+__*__
