@@ -28,10 +28,18 @@
     return isHiddenEl(el.parentElement);
   }
 
+  const CLIPVAULT_UI_TEXT = /^⚡?\s*(收這篇|收藏|存進 Clip Vault)$/i;
+
   function fromSelection() {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.toString().trim()) return null;
-    const text = sel.toString().trim();
+    let text = sel.toString().trim();
+    text = text
+      .split('\n')
+      .map((s) => s.trim())
+      .filter((s) => !CLIPVAULT_UI_TEXT.test(s))
+      .join('\n')
+      .trim();
     const range = sel.getRangeAt(0);
     const images = [];
     try {
@@ -77,6 +85,7 @@
       acceptNode(node) {
         const p = node.parentElement;
         if (!p) return NodeFilter.FILTER_REJECT;
+        if (p.closest && p.closest('.clipvault-btn, .clipvault-post-btn, .clipvault-toast')) return NodeFilter.FILTER_REJECT;
         if (NOISE_TAGS.has(p.tagName)) return NodeFilter.FILTER_REJECT;
         if (isHiddenEl(p)) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
@@ -86,7 +95,7 @@
     let n;
     while ((n = walker.nextNode())) {
       const t = (n.nodeValue || '').replace(/\s+/g, ' ').trim();
-      if (t) lines.push(t);
+      if (t && !CLIPVAULT_UI_TEXT.test(t)) lines.push(t);
     }
     return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }

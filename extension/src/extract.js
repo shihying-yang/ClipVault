@@ -130,6 +130,8 @@
     return out;
   }
 
+  const CLIPVAULT_UI_TEXT = /^⚡?\s*(收這篇|收藏|存進 Clip Vault)$/i;
+
   function postText(ad, root) {
     let lines = [];
     if (ad.text) {
@@ -139,13 +141,14 @@
     }
     if (lines.join('').trim().length < 8) lines = readable(ad, root, root);
 
+    lines = lines.filter((s) => !CLIPVAULT_UI_TEXT.test(s));
     let text = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
     if (text.length < 15) {
       text = (root.innerText || '')
         .split('\n')
         .map((s) => s.trim())
-        .filter((s) => s && !NS.ACTION_WORDS.test(s))
+        .filter((s) => s && !NS.ACTION_WORDS.test(s) && !CLIPVAULT_UI_TEXT.test(s))
         .join('\n')
         .trim();
     }

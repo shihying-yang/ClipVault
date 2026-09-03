@@ -1,5 +1,19 @@
 # 更新紀錄（Changelog & Release Notes）
 
+## [1.2.1] - 2026-09-03
+
+### 🐛 錯誤修復
+- **徹底修復「⚡ 收這篇」按鈕文字被採集進文章正文的問題**：
+  - **根本原因**：在特定社群貼文結構中，內部 `ad.text` 錨點未命中或觸發 `innerText` 後備機制時，若按鈕處於可見狀態，瀏覽器會將貼文右上角的按鈕文字連帶讀入。
+  - **實作五重防護網**：
+    1. **擷取時暫時隱藏**：`content.js` 在 `capture` 執行期間主動將貼文上的 `.clipvault-post-btn` 設為 `display: none`，利用瀏覽器規範杜絕 `innerText` 與選取機制讀入；
+    2. **DOM 文本過濾**：`extract.js` 在 `postText` 與 `innerText` 後備機制全面過濾 `CLIPVAULT_UI_TEXT` 規則；
+    3. **動作字庫排除**：`adapters.js` 的 `ACTION_WORDS` 正則加入擴充自身介面文字；
+    4. **通用頁面防護**：`generic-extract.js` 在劃詞選取與全文樹狀漫遊時全面排除 `.clipvault-*` 元素與按鈕文字；
+    5. **後端安全清洗**：`background.js` 的 `cleanText()` 於寫入各儲存目的地前執行最終安全清洗，確保正文絕對乾淨。
+
+---
+
 ## [1.2.0] - 2026-09-03
 
 ### 🚀 新增功能

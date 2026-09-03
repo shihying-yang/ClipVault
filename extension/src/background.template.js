@@ -772,6 +772,7 @@ function cleanText(s) {
     .replace(/\r/g, '')
     .replace(/\u00A0/g, ' ')
     .replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '')
+    .replace(/(^|\n)⚡?\s*(收這篇|收藏|存進 Clip Vault)\s*($|\n)/gi, '\n')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();

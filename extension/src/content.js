@@ -657,6 +657,8 @@
     }
     busy = true;
     if (btn) btn.disabled = true;
+    const postBtns = [...root.querySelectorAll('.clipvault-post-btn')];
+    postBtns.forEach((b) => { b.style.display = 'none'; });
     try {
       toast('⏳ 展開全文…', null, 0, true);
       await expandAll(root);
@@ -683,6 +685,7 @@
     } catch (e) {
       toast(`❌ ${(e && e.message) || '未知錯誤'}`, null, 8000);
     } finally {
+      postBtns.forEach((b) => { b.style.display = ''; });
       busy = false;
       if (btn) btn.disabled = false;
     }
@@ -695,7 +698,10 @@
       return;
     }
     busy = true;
-    if (btn) btn.disabled = true;
+    if (btn) {
+      btn.disabled = true;
+      btn.style.display = 'none';
+    }
     try {
       const data = GEN.extractGeneric();
       if (!data.text || data.text.length < 5) {
@@ -707,7 +713,10 @@
       toast(`❌ ${(e && e.message) || '未知錯誤'}`, null, 8000);
     } finally {
       busy = false;
-      if (btn) btn.disabled = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.style.display = 'block';
+      }
     }
   }
 
