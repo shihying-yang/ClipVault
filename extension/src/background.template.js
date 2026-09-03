@@ -770,10 +770,10 @@ function cleanText(s) {
   return String(s || '')
     .replace(/\r/g, '')
     .replace(/\u00A0/g, ' ')
-    .replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '')
+    .replace(/[\x00-\x08\x0b-\x1f\x7f\u00AD\u034F\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g, '')
     .replace(/(^|\n)⚡?\s*(收這篇|收藏|存進 Clip Vault)\s*($|\n)/gi, '\n')
     .replace(/(^|\n)Facebook(?=\n|$)/gi, '')
-    .replace(/(^|\n)[a-zA-Z](?=\n|$)/g, '')
+    .replace(/^[\x20-\x7E]$[\r\n]*/gm, '')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();

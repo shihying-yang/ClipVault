@@ -82,7 +82,7 @@
     + ' .clipvault-btn, .clipvault-post-btn, .clipvault-toast, [role="menu"], [role="menuitem"],'
     + ' [role="tablist"], [role="progressbar"], [aria-hidden="true"]';
 
-  const INVISIBLE = /[\u00AD\u034F\u200B-\u200F\u2060-\u2064\u206A-\u206F\uFEFF]/g;
+  const INVISIBLE = /[\u00AD\u034F\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g;
 
   function clean(s) {
     return String(s).replace(INVISIBLE, '').replace(/\u00A0/g, ' ').trim();
@@ -137,7 +137,8 @@
     if (CLIPVAULT_UI_TEXT.test(s)) return true;
     if (NS.ACTION_WORDS.test(s)) return true;
     if (ad && ad.id === 'facebook' && /^facebook$/i.test(s)) return true;
-    if (/^[a-zA-Z]$/.test(s)) return true;
+    // 過濾獨立成行的單一可見 ASCII 字元（如臉書打散的英文字母、數字、冒號等混淆碎字）
+    if (/^[\x20-\x7E]$/.test(s)) return true;
     return false;
   }
 
@@ -342,6 +343,10 @@
     if (!author) {
       const first = cleanAuthor(readable(ad, root, root)[0] || '');
       if (first && first.length <= 40) author = first;
+    }
+
+    if (author && text.startsWith(author)) {
+      text = text.slice(author.length).trim();
     }
 
     const link = permalink(ad, root);
