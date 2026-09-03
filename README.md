@@ -26,14 +26,43 @@ Clip Vault 是一款開源、隱私至上的 Chrome / Chromium 瀏覽器擴充�
 
 ## 🚀 三分鐘快速上手
 
-### 1. 安裝擴充功能
-1. 下載本專案（點擊 GitHub 綠色的 **`Code → Download ZIP`** 並解壓縮，或使用 `git clone`）。
-2. 在終端機執行一次建置腳本：
+### 1. 下載與安裝擴充功能
+
+#### 步驟 A：下載專案到電腦
+* **新手推薦（直接下載 ZIP）**：
+  1. 點擊 GitHub 頁面右上角綠色的 **`Code`** 按鈕 → 選擇 **`Download ZIP`**。
+  2. 下載完成後，將壓縮檔解壓縮到你喜歡的位置（例如 `D:\ClipVault` 或「文件」資料夾中）。
+* **或使用 Git 指令（開發者推薦）**：
+  ```bash
+  git clone https://github.com/shihying-yang/ClipVault.git
+  cd ClipVault
+  ```
+
+#### 步驟 B：一鍵建置（產生擴充功能核心檔案）
+本擴充採用範本化設計，首次載入前需執行一次輕量建置腳本，自動產出專屬的設定檔（`manifest.json` 與 `background.js`）：
+1. 確保電腦已安裝 [Python 3](https://www.python.org/)（一般 Windows / Mac 通常已內建或至官網下載）。
+2. 在專案資料夾中打開終端機（Windows 請開 PowerShell / CMD，Mac 請開 Terminal），執行：
    ```bash
    python tools/build_manifest.py
    ```
-3. 開啟瀏覽器擴充功能頁面（如 `chrome://extensions`、`brave://extensions`、`vivaldi://extensions`）。
-4. 開啟右上角的**「開發人員模式」**，點擊**「載入未封裝項目」**，選取專案中的 `extension` 資料夾。
+   > 看到終端機印出 `已產生 .../extension/manifest.json` 即表示建置完成！
+
+#### 步驟 C：安裝載入到瀏覽器
+1. 打開你的 Chromium 核心瀏覽器，在網址列輸入進入擴充功能管理頁面：
+   * **Google Chrome**：`chrome://extensions`
+   * **Brave**：`brave://extensions`
+   * **Vivaldi**：`vivaldi://extensions`
+   * **Microsoft Edge**：`edge://extensions`
+2. 將右上角（或左側欄）的 **「開發人員模式 (Developer mode)」** 切換為開啟。
+3. 點擊左上角的 **「載入未封裝項目 (Load unpacked)」** 按鈕。
+4. ⚠️ **最關鍵的一步**：在跳出的檔案挑選視窗中，請選取專案資料夾裡的 **`extension` 子資料夾**！  
+   *(注意：不要選到最外層的 `ClipVault` 專案目錄，一定要選到能直接看到 `manifest.json` 的那層 `extension` 資料夾)*。
+5. 載入成功！現在瀏覽器右上角擴充圖示列會出現 ⚡ **Clip Vault**，建議點擊「圖釘」圖示釘選在工具列方便隨時使用。
+
+#### 💡 補充：如何打包分享給他人？
+若您想把已建置好的擴充功能打包分享給沒有 Python 環境的朋友或自己備份：
+* **方法 1（封裝成 .crx 檔）**：在 `chrome://extensions` 頁面點擊「封裝擴充功能」，擴充功能根目錄選取 `extension` 資料夾，即可一鍵打包出安裝檔。
+* **方法 2（壓縮分享）**：直接將執行完 `build_manifest.py` 後的 `extension` 資料夾壓縮成 `.zip` 檔傳給朋友，對方解壓縮後直接照「步驟 C」載入即可！
 
 ### 2. 選擇你的儲存方式
 點擊瀏覽器工具列的 Clip Vault 圖示 → 點選 **「⚙️ 開啟設定」**：
