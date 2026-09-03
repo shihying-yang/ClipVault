@@ -34,13 +34,14 @@ function sendBg(msg) {
 
 async function loadSettings() {
   const s = await chrome.storage.sync.get([
-    'captureEnabled', 'triggerKey',
+    'captureEnabled', 'triggerKey', 'albumEnabled',
     'driveEnabled', 'driveFolderId', 'driveFolderPath', 'driveTags',
     'obsidianEnabled', 'obsidianVault', 'obsidianFolder', 'obsidianTags',
     'localEnabled', 'localFolder', 'localTags',
   ]);
   $('captureEnabled').checked = s.captureEnabled !== false;
   $('triggerKey').value = s.triggerKey || 'alt';
+  $('albumEnabled').checked = s.albumEnabled !== false;
   $('driveEnabled').checked = s.driveEnabled !== false;
   $('driveTags').value = s.driveTags || '';
   $('driveFolderPath').value = s.driveFolderPath || '';
@@ -120,6 +121,7 @@ $('btnSave').addEventListener('click', async () => {
   await chrome.storage.sync.set({
     captureEnabled: $('captureEnabled').checked,
     triggerKey: $('triggerKey').value,
+    albumEnabled: $('albumEnabled').checked,
     driveEnabled,
     driveFolderId: resolvedFolderId,
     driveFolderPath: resolvedFolderPath,

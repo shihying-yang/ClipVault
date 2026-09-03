@@ -36,14 +36,16 @@
   let active = null;
   let enabled = true;
   let triggerKey = 'alt'; // 'alt' | 'ctrl' | 'always'
+  let albumEnabled = true;
   let isModifierActive = false;
   let hoveredPost = null;
   let lastMouseX = -1;
   let lastMouseY = -1;
 
-  chrome.storage.sync.get(['captureEnabled', 'triggerKey'], (r) => {
+  chrome.storage.sync.get(['captureEnabled', 'triggerKey', 'albumEnabled'], (r) => {
     enabled = r.captureEnabled !== false;
     triggerKey = r.triggerKey || 'alt';
+    albumEnabled = r.albumEnabled !== false;
     if (!enabled) hideAllButtons();
     else updateVisibility();
   });
@@ -52,6 +54,9 @@
     if (ch.triggerKey) {
       triggerKey = ch.triggerKey.newValue || 'alt';
       updateVisibility();
+    }
+    if (ch.albumEnabled) {
+      albumEnabled = ch.albumEnabled.newValue !== false;
     }
     if (ch.captureEnabled) {
       enabled = ch.captureEnabled.newValue !== false;
@@ -521,6 +526,111 @@
     return [...seen];
   }
 
+  // ── 相簿（臉書多圖貼文）────────────────────
+  const ALBUM_MAX = 30; // 翻頁次數上限
+  const ALBUM_BUDGET_MS = 45000; // 總時間上限，卡住也一定會收手
+  const NEXT_PHOTO = /^(下一張|下一張相片|下一個|Next|Next photo|Next Photo)$/i;
+
+  function viewerEl() {
+    return document.querySelector('[role="dialog"]');
+  }
+
+  function viewerImages(scope) {
+    const out = [];
+    for (const img of scope.querySelectorAll('img')) {
+      const r = img.getBoundingClientRect();
+      const w = Math.max(r.width, img.naturalWidth || 0);
+      const h = Math.max(r.height, img.naturalHeight || 0);
+      if (w < 300 || h < 300) continue;
+      const src = img.currentSrc || img.getAttribute('src') || '';
+      if (/^https?:\/\//.test(src) && !out.includes(src)) out.push(src);
+    }
+    return out;
+  }
+
+  function nextPhotoButton(scope) {
+    for (const b of scope.querySelectorAll('button, [role="button"]')) {
+      const aria = (b.getAttribute('aria-label') || '').trim();
+      const txt = (b.textContent || '').trim();
+      if (!NEXT_PHOTO.test(aria) && !NEXT_PHOTO.test(txt)) continue;
+      if (!clickable(b)) continue;
+      return b;
+    }
+    return null;
+  }
+
+  function pressRight() {
+    for (const t of [document.activeElement || document.body, document.body]) {
+      t.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'ArrowRight', code: 'ArrowRight', keyCode: 39, which: 39,
+        bubbles: true, cancelable: true,
+      }));
+    }
+  }
+
+  async function closeViewer(startUrl, startY) {
+    for (let i = 0; i < 5; i++) {
+      if (!viewerEl() && location.href === startUrl) break;
+      await dismissDialog();
+      if (location.href !== startUrl) {
+        history.back();
+        await sleep(450);
+      }
+      await sleep(200);
+    }
+    window.scrollTo({ top: startY });
+  }
+
+  async function collectAlbum(root, onCount) {
+    const opener = EX.albumOpener(root);
+    if (!opener) return [];
+
+    const startUrl = location.href;
+    const startY = window.scrollY;
+    const found = new Set();
+    const t0 = Date.now();
+
+    try {
+      opener.click();
+      let opened = false;
+      for (let i = 0; i < 20 && !opened; i++) {
+        await sleep(150);
+        opened = !!viewerEl() || location.href !== startUrl;
+      }
+      if (!opened) return [];
+
+      let dry = 0;
+      for (let i = 0; i < ALBUM_MAX && dry < 2; i++) {
+        if (Date.now() - t0 > ALBUM_BUDGET_MS) break;
+        const scope = viewerEl() || document;
+        await waitImages(scope, 1800);
+
+        const before = found.size;
+        viewerImages(scope).forEach((u) => found.add(u));
+        if (onCount) onCount(found.size);
+
+        if (found.size === before) dry++;
+        else dry = 0;
+
+        pressRight();
+        await sleep(500);
+
+        if (found.size === before) {
+          const b = nextPhotoButton(viewerEl() || document);
+          if (b) {
+            b.click();
+            await sleep(500);
+          }
+        }
+      }
+    } catch (_) {
+      // 任何一步出錯都不能讓整次收錄失敗
+    } finally {
+      await closeViewer(startUrl, startY);
+    }
+    return [...found];
+  }
+
   let busy = false;
 
   async function capture(root, force) {
@@ -546,6 +656,16 @@
       if (ad.next) {
         toast('⏳ 翻過輪播收圖…', null, 0, true);
         data.images = await collectCarousel(root);
+      }
+      // 相簿型貼文：縮圖只鋪 5 張，其餘打開檢視器翻頁收圖
+      if (albumEnabled && EX.isAlbum && EX.isAlbum(root)) {
+        toast('⏳ 這是相簿貼文，翻頁收圖中…', null, 0, true);
+        const more = await collectAlbum(root, (n) => {
+          toast(`⏳ 翻相簿收圖…已收 ${n} 張`, null, 0, true);
+        });
+        if (more.length) {
+          data.images = [...new Set([...more, ...data.images])].slice(0, 30);
+        }
       }
       await send(data, force);
     } catch (e) {
@@ -660,7 +780,118 @@
     return null;
   }
 
-  chrome.runtime.onMessage.addListener((msg) => {
+  // ── 診斷與探測 ───────────────────────────
+  const PROBES = {
+    'role=article': '[role="article"]',
+    'div[aria-labelledby]': 'div[aria-labelledby]',
+    'div[aria-posinset]': 'div[aria-posinset]',
+    'data-ad-preview=message': '[data-ad-preview="message"]',
+    'a[href*="/p/"]': 'a[href*="/p/"]',
+    'role=listitem': '[role="listitem"]',
+    'feed-item': '[role="feed"] > *',
+  };
+
+  function pickReport() {
+    return posts.slice(0, 10).map((el, i) => {
+      const r = el.getBoundingClientRect();
+      const why = rejectReason(r) || '✅ 合格';
+      return `  #${i} y=${Math.round(r.top)} h=${Math.round(r.height)} → ${why}`;
+    });
+  }
+
+  function domSample() {
+    const main = document.querySelector('main') || document.body;
+    const r = main.getBoundingClientRect();
+    const x = Math.round(r.left + r.width / 2);
+    const out = [];
+    for (const frac of [0.35, 0.55, 0.75]) {
+      const y = Math.round(Math.max(80, Math.min(window.innerHeight - 80, window.innerHeight * frac)));
+      const el = document.elementFromPoint(x, y);
+      if (!el || el.closest('.clipvault-toast, .clipvault-btn, .clipvault-post-btn')) continue;
+      out.push(`y=${y} ${(el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 24) || '（無文字）'}`);
+    }
+    return out.length ? out : ['（畫面中央取不到元素）'];
+  }
+
+  function mediaProbe(root) {
+    if (!root || !EX.imageReport) return null;
+    const rep = EX.imageReport(ad, root);
+    const hasNext = !!(ad.next && nextButton(root));
+    return {
+      total: rep.total,
+      taken: rep.taken,
+      photoLinks: rep.photoLinks,
+      moreOverlay: rep.moreOverlay,
+      hasNext,
+      imgs: rep.rows,
+    };
+  }
+
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === 'CLIPVAULT_DIAG') {
+      (async () => {
+        const mf = chrome.runtime.getManifest();
+        if (!ad) {
+          const sel = window.getSelection() ? window.getSelection().toString().trim() : '';
+          const gen = GEN && GEN.extractGeneric ? GEN.extractGeneric() : null;
+          sendResponse({
+            build: mf.version,
+            platform: 'web',
+            label: '通用網頁',
+            path: location.pathname,
+            posts: 0,
+            enabled,
+            triggerKey,
+            hasActive: false,
+            generic: {
+              hasSelection: !!sel,
+              selectionLen: sel.length,
+              textLen: (gen && gen.text && gen.text.length) || 0,
+              title: (gen && gen.title) || document.title || '',
+              imagesCount: (gen && gen.images && gen.images.length) || 0,
+            },
+          });
+          return;
+        }
+
+        refreshPosts();
+        const probe = {};
+        for (const [name, sel] of Object.entries(PROBES)) {
+          try {
+            probe[name] = document.querySelectorAll(sel).length;
+          } catch (_) {
+            probe[name] = -1;
+          }
+        }
+
+        let media = null;
+        const targetPost = hoveredPost || active || posts[0];
+        if (targetPost) {
+          hover(targetPost);
+          await sleep(200);
+          media = mediaProbe(targetPost);
+        }
+
+        sendResponse({
+          build: mf.version,
+          platform: ad.id,
+          label: ad.label,
+          selector: ad.post,
+          posts: posts.length,
+          hasActive: !!active,
+          hovered: !!hoveredPost,
+          enabled,
+          triggerKey,
+          path: location.pathname,
+          probe,
+          media,
+          picks: (posts.length && !active) ? pickReport() : null,
+          viewport: `${window.innerWidth}x${window.innerHeight}`,
+          sample: posts.length ? null : domSample(),
+        });
+      })();
+      return true;
+    }
     if (msg.type === 'CLIPVAULT_CONTEXT') {
       if (!enabled) {
         toast('❌ 收藏功能目前已停用，到設定頁重新開啟', null, 6000);

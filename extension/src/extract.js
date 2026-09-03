@@ -207,25 +207,77 @@
 
   const AVATAR_ALT = /profile picture|大頭貼|大头像|个人资料照片|プロフィール写真|avatar/i;
 
+  // 一張圖收不收，理由是什麼。診斷與實際過濾走同一個函式
+  function imageVerdict(ad, img, root) {
+    if (!ownedBy(ad, img, root)) return '留言區的圖';
+    if (AVATAR_ALT.test(img.getAttribute('alt') || '')) return '頭像（alt）';
+    if (img.closest('header')) return '頭像（在 header 裡）';
+
+    const r = img.getBoundingClientRect();
+    const laidOut = r.width > 0 && r.height > 0;
+    // 輪播裡還沒捲到的那幾張，版面寬高是 0，但 natural 尺寸是真的。
+    // 只看 rect 的話會把它們整批丟掉。反過來說，有版面而且很小的
+    // （40px 頭像、18px reaction icon）就是真的小，不能拿 natural 放行。
+    const w = laidOut ? r.width : (img.naturalWidth || 0);
+    const h = laidOut ? r.height : (img.naturalHeight || 0);
+    if (w < 120 || h < 120) return `太小（${Math.round(w)}×${Math.round(h)}）`;
+
+    const src = img.currentSrc || img.getAttribute('src') || '';
+    if (!/^https?:\/\//.test(src)) return '不是 http(s) 網址';
+    return ''; // 空字串＝要收
+  }
+
   function images(ad, root, cap = 20) {
     const out = [];
     for (const img of root.querySelectorAll('img')) {
-      if (!ownedBy(ad, img, root)) continue;
-      if (AVATAR_ALT.test(img.getAttribute('alt') || '')) continue;
-      if (img.closest('header')) continue;
-
-      const r = img.getBoundingClientRect();
-      const laidOut = r.width > 0 && r.height > 0;
-      const w = laidOut ? r.width : (img.naturalWidth || 0);
-      const h = laidOut ? r.height : (img.naturalHeight || 0);
-      if (w < 120 || h < 120) continue;
-
+      if (imageVerdict(ad, img, root)) continue;
       const src = img.currentSrc || img.getAttribute('src') || '';
-      if (!/^https?:\/\//.test(src)) continue;
       if (!out.includes(src)) out.push(src);
       if (out.length >= cap) break;
     }
     return out;
+  }
+
+  // 相簿型貼文的指紋：「+7」那種疊圖。看到它就代表還有幾張圖根本不在 DOM 裡
+  function albumOverlay(root) {
+    return [...root.querySelectorAll('span, div')]
+      .find((e) => e.childElementCount === 0
+        && /^\+\s?\d+$/.test((e.textContent || '').trim())) || null;
+  }
+
+  function isAlbum(root) {
+    return !!albumOverlay(root) && !!root.querySelector('a[href*="/photo"]');
+  }
+
+  // 點「+7」那一張最省事：它直接開到相簿，不用先翻過前面幾張
+  function albumOpener(root) {
+    const ov = albumOverlay(root);
+    return (ov && ov.closest('a[href*="/photo"]'))
+      || root.querySelector('a[href*="/photo"]');
+  }
+
+  function imageReport(ad, root) {
+    const imgs = [...root.querySelectorAll('img')];
+    const rows = imgs.slice(0, 16).map((img) => {
+      const r = img.getBoundingClientRect();
+      const why = imageVerdict(ad, img, root) || '✅ 收';
+      const alt = (img.getAttribute('alt') || '').replace(/\s+/g, ' ').slice(0, 14);
+      return `  ${Math.round(r.width)}×${Math.round(r.height)}`
+        + ` nat ${img.naturalWidth}×${img.naturalHeight}`
+        + (img.complete ? '' : ' [載入中]')
+        + (alt ? ` alt="${alt}"` : '')
+        + ` → ${why}`;
+    });
+    const photoLinks = root.querySelectorAll('a[href*="/photo"]').length;
+    const ov = albumOverlay(root);
+    const moreOverlay = ov ? (ov.textContent || '').trim() : '';
+    return {
+      total: imgs.length,
+      taken: images(ad, root).length,
+      photoLinks,
+      moreOverlay,
+      rows,
+    };
   }
 
   function extract(ad, root) {
@@ -262,6 +314,7 @@
 
   self.CLIP_VAULT_EXTRACT = {
     outermost, outermostOf, ownedBy, readable, clean, cleanAuthor,
-    postText, firstText, timeText, permalink, images, extract,
+    postText, firstText, timeText, permalink, images, imageVerdict,
+    albumOverlay, isAlbum, albumOpener, imageReport, extract,
   };
 })();
