@@ -26,48 +26,51 @@ Clip Vault 是一款開源、隱私至上的 Chrome / Chromium 瀏覽器擴充�
 
 ## 🚀 三分鐘快速上手
 
-### 1. 下載與安裝擴充功能
+### 1. 選擇最適合你的安裝途徑
 
-#### 步驟 A：下載專案到電腦
-* **新手推薦（直接下載 ZIP）**：
-  1. 點擊 GitHub 頁面右上角綠色的 **`Code`** 按鈕 → 選擇 **`Download ZIP`**。
-  2. 下載完成後，將壓縮檔解壓縮到你喜歡的位置（例如 `D:\ClipVault` 或「文件」資料夾中）。
-* **或使用 Git 指令（開發者推薦）**：
-  ```bash
-  git clone https://github.com/shihying-yang/ClipVault.git
-  cd ClipVault
-  ```
+Clip Vault 提供兩種取得方式，請依據你預計使用的儲存目的地選擇：
 
-#### 步驟 B：一鍵建置（產生擴充功能核心檔案）
-本擴充採用範本化設計，首次載入前需執行一次輕量建置腳本，自動產出專屬的設定檔（`manifest.json` 與 `background.js`）：
-1. 確保電腦已安裝 [Python 3](https://www.python.org/)（一般 Windows / Mac 通常已內建或至官網下載）。
-2. 在專案資料夾中打開終端機（Windows 請開 PowerShell / CMD，Mac 請開 Terminal），執行：
-   ```bash
-   python tools/build_manifest.py
-   ```
-   > 看到終端機印出 `已產生 .../extension/manifest.json` 即表示建置完成！
+| 安裝途徑 | 免安裝 Python？ | 支援本機 Markdown | 支援 Obsidian | 支援 Google Drive | 適合對象 |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **途徑 A：下載 Release ZIP（即裝即用）** | ✅ **是** | ✅ 支援 | ✅ 支援 | ❌ **不支援** | 絕大多數使用者，不想安裝 Python 或設定 API。 |
+| **途徑 B：下載專案原始碼（完整自訂）** | 需 Python 3 | ✅ 支援 | ✅ 支援 | ✅ **支援** | 需要存入個人 Google Drive 雲端文件的使用者。 |
 
-#### 步驟 C：安裝載入到瀏覽器
-1. 打開你的 Chromium 核心瀏覽器，在網址列輸入進入擴充功能管理頁面：
+---
+
+#### 途徑 A：下載 Release ZIP（推薦！30 秒即裝即用）
+> 💡 **說明**：專為只想使用「本機 Markdown」或「Obsidian」的使用者設計。**完全不需安裝 Python，解壓即用！**  
+> *(注意：因開源安全規範，公開預先封裝的 ZIP 檔不含任何私有 Google 金鑰，故**不支援 Google Drive** 功能)*
+
+1. 前往本專案的 [Releases 頁面](https://github.com/shihying-yang/ClipVault/releases)，下載最新版本的 `ClipVault-vX.X.X.zip`。
+2. 將壓縮檔解壓縮到你喜歡的位置（例如 `D:\ClipVault` 或「文件」資料夾中）。
+3. 打開瀏覽器（Chrome/Brave/Vivaldi/Edge），在網址列輸入進入擴充管理頁面：
    * **Google Chrome**：`chrome://extensions`
    * **Brave**：`brave://extensions`
    * **Vivaldi**：`vivaldi://extensions`
    * **Microsoft Edge**：`edge://extensions`
-2. 將右上角（或左側欄）的 **「開發人員模式 (Developer mode)」** 切換為開啟。
-3. 點擊左上角的 **「載入未封裝項目 (Load unpacked)」** 按鈕。
-4. ⚠️ **最關鍵的一步**：在跳出的檔案挑選視窗中，請選取專案資料夾裡的 **`extension` 子資料夾**！  
-   *(注意：不要選到最外層的 `ClipVault` 專案目錄，一定要選到能直接看到 `manifest.json` 的那層 `extension` 資料夾)*。
-5. 載入成功！現在瀏覽器右上角擴充圖示列會出現 ⚡ **Clip Vault**，建議點擊「圖釘」圖示釘選在工具列方便隨時使用。
+4. 開啟右上角（或左側欄）的 **「開發人員模式 (Developer mode)」**。
+5. 點擊 **「載入未封裝項目 (Load unpacked)」**，選取剛才解壓縮出來的資料夾。
+6. 安裝成功！現在瀏覽器右上角擴充圖示列會出現 ⚡ **Clip Vault**，直接開始享受乾淨無干擾的網頁收錄！
 
-#### 💡 補充：如何打包分享給他人？
-若您想把已建置好的擴充功能打包分享給朋友或自己備份：
-* **方法 1（直接從 GitHub Releases 下載，最省事）**：前往本專案的 [Releases 頁面](https://github.com/shihying-yang/ClipVault/releases)，每個版本均提供預先自動打包好的 `ClipVault-vX.X.X.zip` 檔案，下載解壓後依「步驟 C」載入即可！
-* **方法 2（一鍵本機打包腳本）**：在專案終端機執行：
-  ```bash
-  python tools/package_extension.py
-  ```
-  系統會自動執行建置並在 `dist/` 目錄產出乾淨、標準的 `ClipVault-vX.X.X.zip`。
-* **方法 3（瀏覽器封裝成 .crx 檔）**：在 `chrome://extensions` 頁面點擊「封裝擴充功能」，擴充功能根目錄選取 `extension` 資料夾，即可打包出專屬檔案。
+---
+
+#### 途徑 B：下載專案原始碼（若需要存入 Google Drive）
+> 💡 **說明**：若您想將貼文轉存為個人 Google Drive 上的 Google Docs，因涉及個人隱私與免費 API 配額，需下載專案原始碼並綁定個人專屬金鑰。
+
+1. **下載專案**：
+   * **下載 ZIP**：點擊 GitHub 頁面右上角綠色的 **`Code`** 按鈕 → 選擇 **`Download ZIP`** 並解壓。
+   * **或使用 Git**：`git clone https://github.com/shihying-yang/ClipVault.git`
+2. **一鍵建置**：確保電腦安裝有 Python 3，在專案資料夾打開終端機執行：
+   ```bash
+   python tools/build_manifest.py
+   ```
+3. **載入瀏覽器**：至 `chrome://extensions` 開啟開發人員模式 → 點選「載入未封裝項目」→ ⚠️ **選取專案資料夾裡的 `extension` 子資料夾**。
+4. **綁定 Google 授權**：依照下方 [Google Drive 首次連接設定](#-google-drive-首次連接設定) 填入金鑰即大功告成！
+
+#### 💡 補充：如何自行打包分享給他人？
+若您想把已建置好的擴充功能打包備份或分享：
+* **一鍵本機打包腳本**：在專案終端機執行 `python tools/package_extension.py`，系統會在 `dist/` 目錄產出乾淨、標準的 `ClipVault-vX.X.X.zip`。
+* **瀏覽器封裝成 .crx 檔**：在 `chrome://extensions` 頁面點擊「封裝擴充功能」，擴充功能根目錄選取 `extension` 資料夾即可。
 
 ### 2. 選擇你的儲存方式
 點擊瀏覽器工具列的 Clip Vault 圖示 → 點選 **「⚙️ 開啟設定」**：
@@ -82,9 +85,12 @@ Clip Vault 是一款開源、隱私至上的 Chrome / Chromium 瀏覽器擴充�
 
 ## 🔑 Google Drive 首次連接設定
 
-> **提示**：如果您只使用「本機 Markdown」或「Obsidian」，**可以完全跳過此步驟**！只有需要存入 Google Drive 時才需設定。
+> [!IMPORTANT]
+> **為什麼 Release 的預先封裝 ZIP 不支援 Google Drive？**  
+> Clip Vault 採用 100% 無伺服器架構，資料直連您的雲端硬碟，不經由任何第三方伺服器。為了保護個人帳戶隱私與 API 配額安全，公開發布的 `ClipVault-vX.X.X.zip` **絕不夾帶任何私有 Google 金鑰**。  
+> 若您希望使用 Google Drive，請務必依照「途徑 B」下載專案原始碼，並依照下方 6 步驟綁定您專屬的免費 Google API 金鑰。
 
-因為 Clip Vault 採用 100% 無伺服器架構（資料直接由您的瀏覽器存入您的 Google Drive，不經由任何第三方伺服器），因此需要使用您自己的 Google Cloud 免費 API 金鑰：
+因為 Clip Vault 採用 100% 無伺服器架構，因此需要使用您自己的 Google Cloud 免費 API 金鑰：
 
 1. **建立 Google 專案**：前往 [Google Cloud Console](https://console.cloud.google.com/)，點擊建立新專案，並在「API 和服務」中啟用 **Google Drive API** 與 **Google Docs API**。
 2. **設定同意畫面**：
