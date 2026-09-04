@@ -11,6 +11,9 @@
   - 排除獨立成行的單一英文字母（如 Facebook 防爬蟲切碎隱形字 `n`、`r`、`o`、`t`、`e` 等）；
   - 作者清洗中跳過 `Facebook` 品牌名稱，直接正確識別貼文真實作者。
   - **純邏輯層過濾**：完全不更動 DOM 容器選擇器與 CSS 隱形節點判定，確保動態牆與獨立頁面的按鈕正常懸停浮現與正文提取無副作用。
+- **自動化打包與發布工作流（CI/CD & Local Package）**：
+  - 新增 `tools/package_extension.py` 本機打包工具，一鍵產出乾淨且符合 Chrome 規範的 `dist/ClipVault-vX.X.X.zip`。
+  - 建立 GitHub Actions 自動化工作流（`.github/workflows/release.yml`），未來每次推送版本標籤（`v*`）時，GitHub 雲端會自動打包並在 Releases 頁面掛載安裝 Zip 附件供直接下載。
 
 ---
 

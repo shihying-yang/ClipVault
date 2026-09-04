@@ -60,9 +60,14 @@ Clip Vault 是一款開源、隱私至上的 Chrome / Chromium 瀏覽器擴充�
 5. 載入成功！現在瀏覽器右上角擴充圖示列會出現 ⚡ **Clip Vault**，建議點擊「圖釘」圖示釘選在工具列方便隨時使用。
 
 #### 💡 補充：如何打包分享給他人？
-若您想把已建置好的擴充功能打包分享給沒有 Python 環境的朋友或自己備份：
-* **方法 1（封裝成 .crx 檔）**：在 `chrome://extensions` 頁面點擊「封裝擴充功能」，擴充功能根目錄選取 `extension` 資料夾，即可一鍵打包出安裝檔。
-* **方法 2（壓縮分享）**：直接將執行完 `build_manifest.py` 後的 `extension` 資料夾壓縮成 `.zip` 檔傳給朋友，對方解壓縮後直接照「步驟 C」載入即可！
+若您想把已建置好的擴充功能打包分享給朋友或自己備份：
+* **方法 1（直接從 GitHub Releases 下載，最省事）**：前往本專案的 [Releases 頁面](https://github.com/shihying-yang/ClipVault/releases)，每個版本均提供預先自動打包好的 `ClipVault-vX.X.X.zip` 檔案，下載解壓後依「步驟 C」載入即可！
+* **方法 2（一鍵本機打包腳本）**：在專案終端機執行：
+  ```bash
+  python tools/package_extension.py
+  ```
+  系統會自動執行建置並在 `dist/` 目錄產出乾淨、標準的 `ClipVault-vX.X.X.zip`。
+* **方法 3（瀏覽器封裝成 .crx 檔）**：在 `chrome://extensions` 頁面點擊「封裝擴充功能」，擴充功能根目錄選取 `extension` 資料夾，即可打包出專屬檔案。
 
 ### 2. 選擇你的儲存方式
 點擊瀏覽器工具列的 Clip Vault 圖示 → 點選 **「⚙️ 開啟設定」**：

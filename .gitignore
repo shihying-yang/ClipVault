@@ -5,6 +5,7 @@ key.pem
 
 # 打包本不進版控
 *.zip
+dist/
 
 # 本地 OAuth／API 想節省：真正的值只保存在這裡，不進 git 歷史
 .env
