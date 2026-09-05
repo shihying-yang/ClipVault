@@ -1,78 +1,87 @@
-# 更新紀錄（Changelog & Release Notes）
+[English](CHANGELOG.md) | [繁體中文](CHANGELOG_zh.md)
+
+---
+
+# Changelog & Release Notes
+
+All notable changes to Clip Vault will be documented in this file.
 
 ## [1.2.2] - 2026-09-03
 
-### 🐛 錯誤修復與輕量級文字清洗
-- **獨立貼文頁面（`story.php` 等）網址智慧繼承**：
-  - 當貼文內部 DOM 找不到連向自身的超連結時，若當前瀏覽器分頁本身就是獨立貼文網址（如 Facebook 的 `story.php`、`/posts/` 或 X/Threads/IG 的獨立貼文），自動將當前網址清洗垃圾參數後作為原文連結。
-  - 格式化文件直接輸出有效超連結，消除「（這則抓不到原文連結，於 ... 收錄）」的語意誤導。
-- **純文字層級過濾 Facebook 導航字與單字字母混淆**：
-  - 在正文行過濾中直接排除獨立成行的 `Facebook` 品牌字；
-  - 排除獨立成行的單一英文字母（如 Facebook 防爬蟲切碎隱形字 `n`、`r`、`o`、`t`、`e` 等）；
-  - 作者清洗中跳過 `Facebook` 品牌名稱，直接正確識別貼文真實作者。
-  - **純邏輯層過濾**：完全不更動 DOM 容器選擇器與 CSS 隱形節點判定，確保動態牆與獨立頁面的按鈕正常懸停浮現與正文提取無副作用。
-- **自動化打包與發布工作流（CI/CD & Local Package）**：
-  - 新增 `tools/package_extension.py` 本機打包工具，一鍵產出乾淨且符合 Chrome 規範的 `dist/ClipVault-vX.X.X.zip`。
-  - 建立 GitHub Actions 自動化工作流（`.github/workflows/release.yml`），未來每次推送版本標籤（`v*`）時，GitHub 雲端會自動打包並在 Releases 頁面掛載安裝 Zip 附件供直接下載。
+### 🐛 Bug Fixes & Text Sanitization
+- **Standalone Post URL Inheritance (`story.php`, etc.)**:
+  - When the internal post DOM lacks an internal self-referential hyperlink, Clip Vault automatically checks if the active browser tab URL is a standalone post permalink (e.g. Facebook `story.php`, `/posts/`, or standalone posts on X/Threads/IG).
+  - Sanitizes tracking and junk parameters (`mibextid`, `rdid`, `fbclid`, `__cft__`, `__tn__`, `#`) and adopts the canonical URL directly.
+  - Formats valid markdown hyperlinks directly, eliminating confusing "cannot find original link" warnings.
+- **Pure String-Level Filtering for Facebook Navigation & Decoy Characters**:
+  - Drops isolated lines containing only the brand name `Facebook`.
+  - Drops isolated single-character ASCII lines (`^[\x20-\x7E]$` — letters, digits, timestamps, and colons) split by Facebook anti-scraping logic.
+  - Cleans invisible bidirectional control characters (BiDi overrides `\u202A-\u202E` and `\u2060-\u2069`).
+  - Automatically deduplicates author name if repeated at the very start of the body text.
+  - Ignores `Facebook` in author cleaning to accurately detect true author names.
+  - **Zero Side-Effects**: Keeps post container matching and DOM visibility checks strictly unchanged, ensuring 100% stability for Alt-hover buttons and post text extraction.
+- **Automated Packaging & Release Workflows (CI/CD & Local Package)**:
+  - Added `tools/package_extension.py` for one-click local packaging of standard, clean `dist/ClipVault-vX.X.X.zip`.
+  - Established GitHub Actions workflow (`.github/workflows/release.yml`) to automatically build and attach `.zip` release assets whenever version tags (`v*`) are pushed.
 
 ---
 
 ## [1.2.1] - 2026-09-03
 
-### 🐛 錯誤修復
-- **徹底修復「⚡ 收這篇」按鈕文字被採集進文章正文的問題**：
-  - **根本原因**：在特定社群貼文結構中，內部 `ad.text` 錨點未命中或觸發 `innerText` 後備機制時，若按鈕處於可見狀態，瀏覽器會將貼文右上角的按鈕文字連帶讀入。
-  - **實作五重防護網**：
-    1. **擷取時暫時隱藏**：`content.js` 在 `capture` 執行期間主動將貼文上的 `.clipvault-post-btn` 設為 `display: none`，利用瀏覽器規範杜絕 `innerText` 與選取機制讀入；
-    2. **DOM 文本過濾**：`extract.js` 在 `postText` 與 `innerText` 後備機制全面過濾 `CLIPVAULT_UI_TEXT` 規則；
-    3. **動作字庫排除**：`adapters.js` 的 `ACTION_WORDS` 正則加入擴充自身介面文字；
-    4. **通用頁面防護**：`generic-extract.js` 在劃詞選取與全文樹狀漫遊時全面排除 `.clipvault-*` 元素與按鈕文字；
-    5. **後端安全清洗**：`background.js` 的 `cleanText()` 於寫入各儲存目的地前執行最終安全清洗，確保正文絕對乾淨。
+### 🐛 Bug Fixes
+- **Completely Fixed "⚡ Clip this" Button Text Leaking into Post Body**:
+  - **Root Cause**: In specific social post DOM structures where internal `ad.text` anchors missed or triggered `innerText` fallback while the button was visible, browsers read the top-right button text into the document body.
+  - **5-Layer Defense Net**:
+    1. **Temporarily Hide During Capture**: `content.js` hides `.clipvault-post-btn` (`display: none`) while extracting to prevent browser selection/innerText leakage.
+    2. **DOM Text Filtering**: `extract.js` filters out `CLIPVAULT_UI_TEXT` in `postText` and `innerText` fallbacks.
+    3. **Action Words Exclusion**: Added extension UI button labels to `adapters.js` `ACTION_WORDS`.
+    4. **Generic Page Protection**: `generic-extract.js` rejects `.clipvault-*` elements in text selection and tree walking.
+    5. **Backend Sanitization**: `background.js` `cleanText()` performs a final clean before writing to any storage destination.
 
 ---
 
 ## [1.2.0] - 2026-09-03
 
-### 🚀 新增功能
-- **Facebook 相簿貼文自動逐張翻頁收圖**：
-  - 遇到包含「+N」疊圖的多圖相簿時，自動暫時打開相片檢視器，優先以右方向鍵（`ArrowRight`）逐張翻頁收集高畫質原圖（上限 30 張）。
-  - 安全退出防護：具備 45 秒時間上限與連續 2 次無新圖即停止機制，結束時自動按 Esc 關閉檢視器並精準還原原始網址與捲動位置。
-  - 設定頁新增「相簿貼文自動翻頁收圖」開關，可自由開啟或關閉。
-- **Popup 診斷工具箱**：
-  - **「🔍 檢查目前分頁」**：一鍵探測當前分頁的 DOM 錨點匹配數、貼文數、鎖定狀態與圖片過濾裁決報告（通用頁面回報文字選取與內文狀態）。
-  - **「🧹 清除去重紀錄」**：一鍵清空 5000 筆 `cvSeen` 本機快取，方便重複測試或重新收錄。
-  - **指示燈補齊**：Popup 新增「本機 Markdown」啟用狀態指示燈。
+### 🚀 New Features
+- **Facebook Album Multi-Photo Automatic Pagination**:
+  - For album posts containing "+N" overlay tiles, automatically opens the photo viewer temporarily and paginates with the right arrow key (`ArrowRight`) to harvest original high-resolution photos (up to 30 images).
+  - Safety Guards: 45-second timeout and 2-consecutive-dry-run exit mechanism; automatically presses `Escape` to close the viewer and restores the exact URL and scroll position.
+  - Added toggle in Settings to enable/disable album photo pagination.
+- **Popup Diagnostics & Utilities Toolbox**:
+  - **"🔍 Inspect Current Tab"**: Live audit of DOM selector matches, post count, lock status, and image verdict reports.
+  - **"🧹 Clear Seen Cache"**: Instantly flushes the 5,000-entry `cvSeen` local cache for re-testing.
+  - **Status Indicator**: Added LED indicator for "Local Markdown" in popup.
 
-### 🛡 安全與效能優化
-- **動態牆長滾動記憶體保護**：社群平台（FB/Threads/X/LinkedIn）滾動累積超過 120 篇貼文時，自動依距離視窗中線排序只保留最近的 120 篇，自動釋放遠端貼文按鈕與 DOM 引用，防止無限滾動造成的記憶體膨脹。
-- **不可見字元跳脫化**：清洗臉書反爬蟲字元的正則表達式全面改用 `\x00-\x08\x0b-\x1f\x7f` 與 `\u00AD\u034F\u200B-\u200F` 等標準十六進位跳脫形式，徹底消除作業系統與 Git / grep 將原始碼誤判為二進位檔案的問題。
-- **統一圖片過濾裁決（`imageVerdict`）**：集中判定頭像（Header/Alt 標籤）、Reaction 圖示與輪播未展開大圖，避免誤判漏圖。
+### 🛡 Security & Performance
+- **Infinite Scroll Memory Protection**: When accumulated post count on social feeds exceeds 120, sorts by distance to the viewport vertical center and retains only the closest 120 posts, releasing distant button instances and DOM references to prevent memory leaks.
+- **Escaped Hex Invisible Characters**: Standardized anti-scraping character cleanup regexes to standard hex escapes (`\x00-\x08\x0b-\x1f\x7f` and `\u00AD\u034F\u200B-\u200F`), preventing Git, OS tools, and grep from misidentifying source code as binary files.
+- **Unified Image Verdict (`imageVerdict`)**: Centralized decision logic for avatars (header/alt tags), reaction icons, and unexpanded carousel images.
 
 ---
 
 ## [1.1.0] - 2026-09-03
 
-### 🚀 新增功能
-- **按需智慧顯示收藏按鈕**：
-  - 平常瀏覽網頁不顯示按鈕，杜絕畫面雜亂。
-  - 預設「按住 `Alt` 鍵（Mac 為 `Option`）且滑鼠指向該貼文」時，貼文右上角才會優雅浮現「⚡ 收這篇」，通用頁面右下角浮現「⚡ 收藏」。
-  - 設定頁提供「按鈕顯示時機」選項：可自訂為 `Alt`、`Ctrl` 或 `一律常駐顯示`。
-- **Obsidian 零分頁閃爍靜默喚起**：
-  - 改由前端 content script 建立動態隱藏連結喚起 `obsidian://` 協定。
-  - 徹底消除了原本每收藏一篇就彈出空白分頁佔用螢幕 1.5 秒再強行關閉的閃爍現象。
+### 🚀 New Features
+- **On-Demand Clip Button Reveal**:
+  - Kept off by default to maintain clean web reading.
+  - Gently reveals "⚡ Clip this" only when holding `Alt` (Mac: `Option`) while hovering over a post.
+  - Settings allows configuring trigger key to `Alt`, `Ctrl`, or `Always visible`.
+- **Obsidian Zero-Tab-Flicker Silent Invocation**:
+  - Invokes `obsidian://` protocol via dynamic hidden anchor in the content script.
+  - Completely eliminates blank tab flashes that previously interrupted browsing for 1.5 seconds per clip.
 
-### 🐛 錯誤修復
-- **修復 Windows Chrome Alt 鍵奪取焦點問題**：在 Windows 平台上按下放開 Alt 鍵會觸發 Chrome 功能表並讓網頁 blur，導致第二次按 Alt 鍵無效；現已在 Alt 鍵事件加上 `preventDefault()` 保持網頁焦點。
-- **修復與 IDM（Internet Download Manager）的下載衝突**：移除背景中多餘的全域 `onDeterminingFilename` 監聽器，直接在 `chrome.downloads.download({ filename })` 原生參數傳遞檔名，徹底解決與 IDM 競爭檔名導致的紅字衝突錯誤。
-- **權限瘦身**：從 Manifest 移除未使用的 `scripting` 敏感權限，符合 Chrome Web Store 最小權限規範。
+### 🐛 Bug Fixes
+- **Fixed Windows Chrome Alt Key Focus Hijacking**: On Windows, releasing `Alt` activated Chrome's top menu bar and blurred the web page, breaking subsequent Alt key presses; added `preventDefault()` on Alt key events.
+- **Fixed IDM (Internet Download Manager) Conflict**: Removed redundant global `onDeterminingFilename` listener, passing filenames directly via `chrome.downloads.download({ filename })` parameters.
+- **Permission Slimming**: Removed unused `scripting` permission from Manifest to adhere to Chrome Web Store least-privilege standards.
 
 ---
 
 ## [1.0.0] - 2026-09-02
 
-### 🚀 初始版本
-- 支援三大收藏目的地：Google Drive、Obsidian、本機 Markdown。
-- 支援 Facebook、Threads、X、Instagram、LinkedIn 專用貼文與輪播圖擷取。
-- 支援通用網頁選取文字或主文啟發式擷取。
-- Google Drive 支援自動多層目錄遞迴建立與圖片嵌入。
-- 支援重複貼文比對防呆機制（5000 筆去重快取）。
+### 🚀 Initial Release
+- Support for 3 storage backends: Google Drive, Obsidian, Local Markdown.
+- Dedicated adapters for Facebook, Threads, X, Instagram, LinkedIn.
+- Generic web clipper for text selection and full-page heuristic extraction.
+- Google Drive automatic multi-level folder creation and inline image embedding.
+- 5,000-entry deduplication cache.
