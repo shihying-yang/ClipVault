@@ -53,10 +53,13 @@ extension/
     ├── background.js            build_manifest.py 產生，不進版控（.gitignore）
     └── toast.css                注入頁面的 UI 樣式
 tools/
-└── build_manifest.py           從上面兩個佔位符檔 + .env 產生實際使用的兩個檔案
-.env.example                       cp 成 .env 後填自己的 client_id/client_secret
+├── build_manifest.py          從上面兩個佔位符檔 + .env 產生實際使用的兩個檔案
+├── package_extension.py        將 extension/ 打包成 dist/ClipVault-vX.X.X.zip
+└── scan_invisible.py           掃描原始碼是否有未跳脫的字面不可見字元
+.env.example                    cp 成 .env 後填自己的 client_id/client_secret
 docs/
-└── IMPLEMENTATION.md           你現在看的這份
+├── IMPLEMENTATION.md          英文版實作文件
+└── IMPLEMENTATION_zh.md       繁體中文版實作文件（你現在看的這份）
 ```
 
 **重要規則**：`extension/manifest.json` 與 `extension/src/background.js` **永遠不手動

@@ -6,6 +6,20 @@
 
 All notable changes to Clip Vault will be documented in this file.
 
+## [1.2.3] - 2026-09-05
+
+### 🚀 Optimizations & Upstream Sync (PostSync v1.5.0)
+- **Shared Binary Image Cache (`blobCache`)**:
+  - Implemented an in-memory byte buffer cache in the service worker (`background.js`).
+  - Ensures that during multi-step image uploading and processing (e.g., Google Drive fallback uploads), any given image URL is downloaded from the origin server (Facebook / Instagram CDN) strictly once, saving bandwidth and preventing rate-limiting.
+- **Static Invisible Characters Scanner Tool (`tools/scan_invisible.py`)**:
+  - Added an automated developer tool to recursively inspect all JavaScript files for unescaped non-printable Unicode characters (such as zero-width spaces, BiDi overrides, and control codes).
+  - Enforces standard hex escape sequences (`\x00-\x08`, `\u00AD`, `\u200B`) across all regex patterns, permanently preventing OS tools, Git, and grep from misidentifying source files as binary.
+- **Upstream Alignment**:
+  - Verified and confirmed parity with upstream PostSync v1.5.0 updates.
+
+---
+
 ## [1.2.2] - 2026-09-03
 
 ### 🐛 Bug Fixes & Text Sanitization

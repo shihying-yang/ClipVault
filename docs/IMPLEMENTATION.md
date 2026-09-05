@@ -49,7 +49,8 @@ extension/
     └── toast.css               Injected UI stylesheets
 tools/
 ├── build_manifest.py          Injects .env secrets into manifest.json and background.js
-└── package_extension.py        Packages extension/ into clean dist/ClipVault-vX.X.X.zip
+├── package_extension.py        Packages extension/ into clean dist/ClipVault-vX.X.X.zip
+└── scan_invisible.py           Scans source code for unescaped invisible characters
 .env.example                    Template for local GOOGLE_OAUTH_CLIENT_ID / SECRET
 docs/
 ├── IMPLEMENTATION.md          English implementation guide (this document)

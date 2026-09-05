@@ -383,12 +383,13 @@ async function handleCapture(p, force, tabId) {
     return { ok: false, error: m };
   }
 
+  const getBlob = blobCache();
   let drive = null;
   let driveError = '';
   if (wantDrive) {
     try {
       progress(tabId, '確認 Google 授權…');
-      drive = await withAuthRetry((token) => writeDrive(token, p, s, tabId));
+      drive = await withAuthRetry((token) => writeDrive(token, p, s, tabId, getBlob));
     } catch (e) {
       driveError = errMsg(e);
     }
@@ -455,14 +456,26 @@ async function handleCapture(p, force, tabId) {
   };
 }
 
-async function writeDrive(token, p, s, tabId) {
+function blobCache() {
+  const map = new Map();
+  return async function getBlob(url) {
+    if (map.has(url)) return map.get(url);
+    const res = await fetchT(url, {}, 30000);
+    if (!res.ok) throw new Error(`下載失敗 ${res.status}`);
+    const blob = await res.blob();
+    map.set(url, blob);
+    return blob;
+  };
+}
+
+async function writeDrive(token, p, s, tabId, getBlob) {
   progress(tabId, `建立 Doc（${p.text.length.toLocaleString()} 字）…`);
   const doc = await createDoc(token, s.driveFolderId, p, s.driveTags);
 
   let imgNote = '';
   if (p.images && p.images.length) {
     progress(tabId, `嵌入 ${p.images.length} 張圖…`);
-    imgNote = await insertImages(token, doc.docId, s.driveFolderId, p.images, tabId);
+    imgNote = await insertImages(token, doc.docId, s.driveFolderId, p.images, tabId, getBlob);
   }
   return {
     docName: doc.name,
@@ -574,10 +587,8 @@ async function insertOneImage(token, docId, uri) {
   });
 }
 
-async function viaDrive(token, docId, folderId, url) {
-  const res = await fetchT(url, {}, 30000);
-  if (!res.ok) throw new Error(`下載失敗 ${res.status}`);
-  const blob = await res.blob();
+async function viaDrive(token, docId, folderId, url, getBlob) {
+  const blob = getBlob ? await getBlob(url) : await (await fetchT(url, {}, 30000)).blob();
   if (blob.size > 45 * 1024 * 1024) throw new Error('圖片過大');
 
   const boundary = `clipvault${Math.random().toString(36).slice(2)}`;
@@ -611,7 +622,7 @@ async function viaDrive(token, docId, folderId, url) {
   }
 }
 
-async function insertImages(token, docId, folderId, urls, tabId) {
+async function insertImages(token, docId, folderId, urls, tabId, getBlob) {
   const failed = [];
   let done = 0;
   for (const url of urls) {
@@ -622,7 +633,7 @@ async function insertImages(token, docId, folderId, urls, tabId) {
       continue;
     } catch (_) { /* 第一層被擋，換第二層 */ }
     try {
-      await viaDrive(token, docId, folderId, url);
+      await viaDrive(token, docId, folderId, url, getBlob);
       done++;
     } catch (e) {
       failed.push(url);
